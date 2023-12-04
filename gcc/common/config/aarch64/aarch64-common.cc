@@ -475,6 +475,8 @@ is_host_cpu_not_armv8_base (int argc, const char **argv)
   return "";
 }
 
+#if TARGET_AARCH64_MS_ABI
+
 /* Implement TARGET_EXCEPT_UNWIND_INFO.  */
 
 static enum unwind_info_type
@@ -500,6 +502,8 @@ aarch64_except_unwind_info (struct gcc_options *opts)
 
 #undef  TARGET_EXCEPT_UNWIND_INFO
 #define TARGET_EXCEPT_UNWIND_INFO  aarch64_except_unwind_info
+
+#endif // TARGET_AARCH64_MS_ABI
 
 struct gcc_targetm_common targetm_common = TARGETM_COMMON_INITIALIZER;
 

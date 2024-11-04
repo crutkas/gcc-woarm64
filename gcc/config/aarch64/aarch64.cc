@@ -2299,6 +2299,24 @@ is_variadic_function_type (const_tree fntype) {
   return arg_count > 0;
 }
 
+/* Return true if a function has variadic arguments.  */
+
+static bool
+is_variadic_function_type (const_tree fntype) {
+  if (TYPE_NO_NAMED_ARGS_STDARG_P (fntype))
+    return true;
+
+  int arg_count = 0;
+  for (tree arg = TYPE_ARG_TYPES (fntype); arg; arg = TREE_CHAIN (arg))
+    {
+      if (TREE_VALUE (arg) == void_type_node)
+	return false;
+      arg_count++;
+    }
+
+  return arg_count > 0;
+}
+
 /* Implement TARGET_FNTYPE_ABI.  */
 
 static const predefined_function_abi &
@@ -7214,6 +7232,12 @@ aarch64_layout_arg (cumulative_args_t pcum_v, const function_arg_info &arg)
     return;
   }
 
+  // TODO: Figure out if special handling will be needed or delete this.
+  if (pcum->pcs_variant == ARM_PCS_MS_VARIADIC) {
+    aarch64_ms_variadic_abi_layout_arg (pcum_v, arg);
+    return;
+  }
+
   bool warn_pcs_change
     = (warn_psabi
        && !pcum->silent_p
@@ -7609,6 +7633,21 @@ aarch64_function_arg (cumulative_args_t pcum_v, const function_arg_info &arg)
 
   aarch64_layout_arg (pcum_v, arg);
   return pcum->aapcs_reg;
+}
+
+/* Implement TARGET_FUNCTION_INCOMING_ARG.  */
+
+// TODO: Figure out if some special handling will be needed or delete this hook.
+static rtx
+aarch64_ms_variadic_abi_function_incoming_arg (cumulative_args_t pcum_v,
+					       const function_arg_info &arg)
+{
+  CUMULATIVE_ARGS *pcum = get_cumulative_args (pcum_v);
+
+  if (pcum->pcs_variant == ARM_PCS_MS_VARIADIC)
+    return aarch64_function_arg (pcum_v, arg);
+
+  return aarch64_function_arg (pcum_v, arg);
 }
 
 void
@@ -22032,6 +22071,52 @@ aarch64_setup_incoming_varargs (cumulative_args_t cum_v,
        + vr_saved * UNITS_PER_VREG);
 }
 
+// TODO: Implement this in aarch64_setup_incoming_varargs using
+//	 cfun->va_list_gpr_size.
+static void
+aarch64_ms_variadic_abi_setup_incoming_varargs (cumulative_args_t cum_v,
+						const function_arg_info &arg,
+						int *pretend_size ATTRIBUTE_UNUSED,
+						int no_rtl)
+{
+  CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
+  CUMULATIVE_ARGS local_cum;
+  int gr_saved = cfun->va_list_gpr_size;
+
+  /* The caller has advanced CUM up to, but not beyond, the last named
+     argument.  Advance a local copy of CUM past the last "real" named
+     argument, to find out how many registers are left over.  */
+  local_cum = *cum;
+  if (!TYPE_NO_NAMED_ARGS_STDARG_P (TREE_TYPE (current_function_decl)))
+    aarch64_function_arg_advance (pack_cumulative_args(&local_cum), arg);
+
+  /* Found out how many registers we need to save.
+     Honor tree-stdvar analysis results.  */
+  if (cfun->va_list_gpr_size)
+    gr_saved = MIN (NUM_ARG_REGS - local_cum.aapcs_ncrn,
+		    cfun->va_list_gpr_size / UNITS_PER_WORD);
+
+  if (!no_rtl)
+    {
+      rtx ptr, mem;
+
+      /* virtual_incoming_args_rtx should have been 16-byte aligned.  */
+      ptr = plus_constant (Pmode, virtual_incoming_args_rtx,
+			   - gr_saved * UNITS_PER_WORD);
+      mem = gen_frame_mem (BLKmode, ptr);
+      set_mem_alias_set (mem, get_varargs_alias_set ());
+
+      move_block_from_reg (local_cum.aapcs_ncrn + R0_REGNUM, mem, gr_saved);
+    }
+
+  /* We don't save the size into *PRETEND_SIZE because we want to avoid
+     any complication of having crtl->args.pretend_args_size changed.  */
+  cfun->machine->frame.unaligned_saved_varargs_size = gr_saved * UNITS_PER_WORD;
+  cfun->machine->frame.saved_varargs_size
+    = ROUND_UP (cfun->machine->frame.unaligned_saved_varargs_size,
+		STACK_BOUNDARY / BITS_PER_UNIT);
+}
+
 static void
 aarch64_conditional_register_usage (void)
 {
@@ -31734,6 +31819,12 @@ aarch64_run_selftests (void)
 #undef TARGET_FUNCTION_ARG
 #define TARGET_FUNCTION_ARG aarch64_function_arg
 
+// TODO: Figure out if some special handling will be needed or delete this hook.
+/*#if defined (TARGET_AARCH64_MS_ABI)
+#undef TARGET_FUNCTION_INCOMING_ARG
+#define TARGET_FUNCTION_INCOMING_ARG aarch64_ms_variadic_abi_function_incoming_arg
+#endif*/
+
 #undef TARGET_FUNCTION_ARG_ADVANCE
 #define TARGET_FUNCTION_ARG_ADVANCE aarch64_function_arg_advance
 
@@ -31881,8 +31972,13 @@ aarch64_libgcc_floating_mode_supported_p
 #undef TARGET_SHIFT_TRUNCATION_MASK
 #define TARGET_SHIFT_TRUNCATION_MASK aarch64_shift_truncation_mask
 
+#if defined (TARGET_AARCH64_MS_ABI)
+#undef TARGET_SETUP_INCOMING_VARARGS
+#define TARGET_SETUP_INCOMING_VARARGS aarch64_ms_variadic_abi_setup_incoming_varargs
+#else
 #undef TARGET_SETUP_INCOMING_VARARGS
 #define TARGET_SETUP_INCOMING_VARARGS aarch64_setup_incoming_varargs
+#endif
 
 #undef TARGET_STRUCT_VALUE_RTX
 #define TARGET_STRUCT_VALUE_RTX   aarch64_struct_value_rtx
@@ -32172,8 +32268,14 @@ aarch64_libgcc_floating_mode_supported_p
 #undef TARGET_ASM_POST_CFI_STARTPROC
 #define TARGET_ASM_POST_CFI_STARTPROC aarch64_post_cfi_startproc
 
+#if defined (TARGET_AARCH64_MS_ABI)
+// TODO: Figure out if this is needed.
+#undef TARGET_STRICT_ARGUMENT_NAMING
+#define TARGET_STRICT_ARGUMENT_NAMING aarch64_ms_variadic_abi_strict_argument_naming
+#else
 #undef TARGET_STRICT_ARGUMENT_NAMING
 #define TARGET_STRICT_ARGUMENT_NAMING hook_bool_CUMULATIVE_ARGS_true
+#endif
 
 #undef TARGET_MODE_EMIT
 #define TARGET_MODE_EMIT aarch64_mode_emit

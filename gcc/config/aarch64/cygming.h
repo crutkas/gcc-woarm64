@@ -238,8 +238,11 @@ along with GCC; see the file COPYING3.  If not see
   i386_pe_end_cold_function (FILE, NAME, DECL)
 
 #define SUBTARGET_ATTRIBUTE_TABLE \
-  { "selectany", 0, 0, true, false, false, false, \
-    mingw_handle_selectany_attribute, NULL }
+  { "selectany", 0, 0, true, false, false, false,			\
+    mingw_handle_selectany_attribute, NULL },				\
+  { "ms_abi", 0, 0, false, true, true, true,				\
+    aarch64_handle_ms_abi_attribute, NULL },				\
+  { "ms_abi va_list", 0, 0, false, false, false, false, NULL, NULL }
 
 #undef SUB_TARGET_RECORD_STUB
 #define SUB_TARGET_RECORD_STUB(NAME, DECL) mingw_pe_record_stub((NAME), \
@@ -315,3 +318,9 @@ along with GCC; see the file COPYING3.  If not see
   while (0)
 
 #endif
+
+#undef  SUBTARGET_INIT_BUILTINS
+#define SUBTARGET_INIT_BUILTINS						\
+  do {									\
+    aarch64_ms_variadic_abi_init_builtins ();				\
+  } while(0)

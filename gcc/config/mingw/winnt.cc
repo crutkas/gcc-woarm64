@@ -95,6 +95,28 @@ mingw_handle_selectany_attribute (tree *node, tree name, tree, int,
   return NULL_TREE;
 }
 
+/* Handle a "ms_abi" attribute; arguments as in struct
+   attribute_spec.handler.  */
+
+tree
+aarch64_handle_ms_abi_attribute (tree *node, tree name, tree, int,
+				 bool *no_add_attrs)
+{
+  if (TREE_CODE (*node) != FUNCTION_TYPE
+      && TREE_CODE (*node) != METHOD_TYPE
+      && TREE_CODE (*node) != FIELD_DECL
+      && TREE_CODE (*node) != TYPE_DECL)
+    {
+      warning (OPT_Wattributes, "%qE attribute only applies to functions",
+	       name);
+      *no_add_attrs = true;
+
+      return NULL_TREE;
+    }
+
+  return NULL_TREE;
+}
+
 
 /* Return the type that we should use to determine if DECL is
    imported or exported.  */

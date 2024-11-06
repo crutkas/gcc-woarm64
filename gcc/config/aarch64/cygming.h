@@ -54,22 +54,22 @@ along with GCC; see the file COPYING3.  If not see
 
 
 /* Support hooks for SEH.  */
-// #undef  TARGET_ASM_UNWIND_EMIT
-// #define TARGET_ASM_UNWIND_EMIT  i386_pe_seh_unwind_emit
+#undef  TARGET_ASM_UNWIND_EMIT
+#define TARGET_ASM_UNWIND_EMIT  aarch64_pe_seh_unwind_emit
 #undef  TARGET_ASM_UNWIND_EMIT_BEFORE_INSN
 #define TARGET_ASM_UNWIND_EMIT_BEFORE_INSN  false
-// #undef  TARGET_ASM_FUNCTION_PROLOGUE
-// #define TARGET_ASM_FUNCTION_PROLOGUE aarch64_pe_seh_function_prologue
+#undef  TARGET_ASM_FUNCTION_PROLOGUE
+#define TARGET_ASM_FUNCTION_PROLOGUE aarch64_pe_seh_function_prologue
 #undef  TARGET_ASM_FUNCTION_END_PROLOGUE
-#define TARGET_ASM_FUNCTION_END_PROLOGUE  i386_pe_seh_end_prologue
+#define TARGET_ASM_FUNCTION_END_PROLOGUE  aarch64_pe_seh_end_prologue
 #undef  TARGET_ASM_EMIT_EXCEPT_PERSONALITY
-#define TARGET_ASM_EMIT_EXCEPT_PERSONALITY i386_pe_seh_emit_except_personality
+#define TARGET_ASM_EMIT_EXCEPT_PERSONALITY aarch64_pe_seh_emit_except_personality
 #undef  TARGET_ASM_INIT_SECTIONS
-#define TARGET_ASM_INIT_SECTIONS  i386_pe_seh_init_sections
+#define TARGET_ASM_INIT_SECTIONS  aarch64_pe_seh_init_sections
 #undef  SUBTARGET_ASM_UNWIND_INIT
-#define SUBTARGET_ASM_UNWIND_INIT  i386_pe_seh_init
-// #undef  TARGET_ASM_FINAL_POSTSCAN_INSN
-// #define TARGET_ASM_FINAL_POSTSCAN_INSN aarch64_pe_seh_asm_final_postscan_insn
+#define SUBTARGET_ASM_UNWIND_INIT  aarch64_pe_seh_init
+#undef  TARGET_ASM_FINAL_POSTSCAN_INSN
+#define TARGET_ASM_FINAL_POSTSCAN_INSN aarch64_pe_seh_asm_final_postscan_insn
 
 #undef TARGET_PECOFF
 #define TARGET_PECOFF 1
@@ -98,21 +98,21 @@ along with GCC; see the file COPYING3.  If not see
 #define TARGET_SEH  1
 
 /* SEH support */
-extern void i386_pe_seh_init (FILE *);
-extern void i386_pe_seh_end_prologue (FILE *);
-// extern void aarch64_pe_seh_function_prologue (FILE *);
-// extern void aarch64_pe_seh_cold_init (FILE *, const char *);
-extern void i386_pe_seh_unwind_emit (FILE *, rtx_insn *);
-extern void i386_pe_seh_emit_except_personality (rtx);
-extern void i386_pe_seh_init_sections (void);
-// extern void aarch64_pe_seh_asm_final_postscan_insn (FILE *stream, rtx_insn *insn, rtx*, int);
+extern void aarch64_pe_seh_init (FILE *);
+extern void aarch64_pe_seh_end_prologue (FILE *);
+extern void aarch64_pe_seh_function_prologue (FILE *);
+extern void aarch64_pe_seh_cold_init (FILE *, const char *);
+extern void aarch64_pe_seh_unwind_emit (FILE *, rtx_insn *);
+extern void aarch64_pe_seh_emit_except_personality (rtx);
+extern void aarch64_pe_seh_init_sections (void);
+extern void aarch64_pe_seh_asm_final_postscan_insn (FILE *stream, rtx_insn *insn, rtx*, int);
  
 /* In winnt */
-// extern void aarch64_print_reg (rtx, int, FILE*);
-extern void i386_pe_end_function (FILE *f, const char *, tree);
-extern void i386_pe_end_cold_function (FILE *f, const char *, tree);
-// extern void aarch64_pe_end_epilogue (FILE *file);
-// extern void aarch64_pe_begin_epilogue (FILE *file);
+extern void aarch64_print_reg (rtx, int, FILE*);
+extern void aarch64_pe_end_function (FILE *f, const char *, tree);
+extern void aarch64_pe_end_cold_function (FILE *f, const char *, tree);
+extern void aarch64_pe_end_epilogue (FILE *file);
+extern void aarch64_pe_begin_epilogue (FILE *file);
 extern void i386_pe_record_external_function (tree, const char *);
 
 #define TARGET_VALID_DLLIMPORT_ATTRIBUTE_P mingw_pe_valid_dllimport_attribute_p
@@ -265,14 +265,14 @@ extern void i386_pe_record_external_function (tree, const char *);
 
 #undef ASM_DECLARE_FUNCTION_SIZE
 #define ASM_DECLARE_FUNCTION_SIZE(FILE,NAME,DECL) \
-  i386_pe_end_function (FILE, NAME, DECL)
+  aarch64_pe_end_function (FILE, NAME, DECL)
 
 #undef ASM_DECLARE_COLD_FUNCTION_SIZE
 #define ASM_DECLARE_COLD_FUNCTION_SIZE(FILE,NAME,DECL) \
-  i386_pe_end_cold_function (FILE, NAME, DECL)
+  aarch64_pe_end_cold_function (FILE, NAME, DECL)
 
-// #undef  TARGET_ASM_FUNCTION_BEGIN_EPILOGUE
-// #define TARGET_ASM_FUNCTION_BEGIN_EPILOGUE aarch64_pe_begin_epilogue
+#undef  TARGET_ASM_FUNCTION_BEGIN_EPILOGUE
+#define TARGET_ASM_FUNCTION_BEGIN_EPILOGUE aarch64_pe_begin_epilogue
 
 #define SUBTARGET_ATTRIBUTE_TABLE \
   { "selectany", 0, 0, true, false, false, false, \
@@ -298,6 +298,14 @@ do {							\
   mingw_pe_declare_function_type (STR, NAME, TREE_PUBLIC (DECL)); \
   aarch64_declare_function_name (STR, NAME, DECL)
 
+#define ASM_DECLARE_COLD_FUNCTION_NAME(FILE, NAME, DECL)	\
+  do								\
+    {								\
+      mingw_pe_declare_function_type (FILE, NAME, 0);		\
+      aarch64_pe_seh_cold_init (FILE, NAME);			\
+      ASM_OUTPUT_LABEL (FILE, NAME);				\
+    }								\
+  while (0)
 
 /* Define this to be nonzero if static stack checking is supported.  */
 #define STACK_CHECK_STATIC_BUILTIN 1

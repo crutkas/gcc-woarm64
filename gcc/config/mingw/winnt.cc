@@ -777,7 +777,7 @@ mingw_pe_file_end (void)
 #endif /* CXX_WRAP_SPEC_LIST */
 	  TREE_ASM_WRITTEN (decl) = 1;
 	  mingw_pe_declare_type (asm_out_file, p->name,
-					 TREE_PUBLIC (decl), 1);
+				 TREE_PUBLIC (decl), 1);
 	}
     }
 

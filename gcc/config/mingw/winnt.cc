@@ -170,6 +170,8 @@ mingw_pe_valid_dllimport_attribute_p (const_tree decl)
    return true;
 }
 
+#if !defined (TARGET_AARCH64_MS_ABI)
+
 /* Return string which is the function name, identified by ID, modified
    with a suffix consisting of an atsign (@) followed by the number of
    bytes of arguments.  If ID is NULL use the DECL_NAME as base. If
@@ -224,8 +226,6 @@ gen_stdcall_or_fastcall_suffix (tree decl, tree id, bool fastcall)
 
   return get_identifier (new_str);
 }
-
-#if !defined (TARGET_AARCH64_MS_ABI)
 
 /* Maybe decorate and get a new identifier for the DECL of a stdcall or
    fastcall function. The original identifier is supplied in ID. */
@@ -882,7 +882,7 @@ struct seh_frame_state
 /* Set up data structures beginning output for SEH.  */
 
 void
-i386_pe_seh_init (FILE *f)
+mingw_pe_seh_init (FILE *f)
 {
   struct seh_frame_state *seh;
 
@@ -910,7 +910,7 @@ i386_pe_seh_init (FILE *f)
 /* Emit an assembler directive for the end of the prologue.  */
 
 void
-i386_pe_seh_end_prologue (FILE *f)
+mingw_pe_seh_end_prologue (FILE *f)
 {
   if (!TARGET_SEH)
     return;
@@ -923,8 +923,13 @@ i386_pe_seh_end_prologue (FILE *f)
 /* Emit assembler directives to reconstruct the SEH state.  */
 
 void
-i386_pe_seh_cold_init (FILE *f, const char *name)
+mingw_pe_seh_cold_init (FILE *f, const char *name)
 {
+#if defined (TARGET_AARCH64_MS_ABI)
+  mingw_pe_seh_init (f);
+  return;
+#endif
+
   struct seh_frame_state *seh;
   HOST_WIDE_INT alloc_offset, offset;
 
@@ -1006,7 +1011,7 @@ i386_pe_seh_cold_init (FILE *f, const char *name)
 /* Emit an assembler directive for the end of the function.  */
 
 static void
-i386_pe_seh_fini (FILE *f, bool cold)
+mingw_pe_seh_fini (FILE *f, bool cold)
 {
   struct seh_frame_state *seh;
 
@@ -1048,6 +1053,15 @@ seh_emit_save (FILE *f, struct seh_frame_state *seh,
 	       rtx reg, HOST_WIDE_INT cfa_offset)
 {
   const unsigned int regno = REGNO (reg);
+#if defined (TARGET_AARCH64_MS_ABI)
+  fputs ((FP_REGNUM_P (regno) ? " \t.seh_save_freg\t"
+	 : GP_REGNUM_P (regno) ?  " \t.seh_save_reg\t"
+	 : (gcc_unreachable (), "")), f);
+  aarch64_print_reg (reg, 0, f);
+  fprintf (f, ", " HOST_WIDE_INT_PRINT_DEC " \n", abs(cfa_offset));
+  return;
+#endif
+
   HOST_WIDE_INT offset;
 
   seh->reg_offset[regno] = cfa_offset;
@@ -1072,8 +1086,12 @@ seh_emit_stackalloc (FILE *f, struct seh_frame_state *seh,
 {
   /* We're only concerned with prologue stack allocations, which all
      are subtractions from the stack pointer.  */
+#if defined (TARGET_AARCH64_MS_ABI)
+  offset = abs(offset);
+#else
   gcc_assert (offset < 0);
   offset = -offset;
+#endif
 
   if (seh->cfa_reg == stack_pointer_rtx)
     seh->cfa_offset += offset;
@@ -1329,8 +1347,240 @@ i386_pe_seh_unwind_emit (FILE *out_file, rtx_insn *insn)
   seh_frame_related_expr (out_file, seh, pat);
 }
 
+#define CALLEE_SAVED_REG_NUMBER(r) \
+  (((r) >= R19_REGNUM && (r) <= R30_REGNUM) || ((r) >= V8_REGNUM && (r) <= V15_REGNUM))
+
+static HOST_WIDE_INT
+seh_parallel_offset (rtx pat, HOST_WIDE_INT wanted_regnum)
+{
+  rtx dest, src;
+  HOST_WIDE_INT result = 0;
+
+  if (GET_CODE (pat) == PARALLEL)
+    {
+      int i, n = XVECLEN (pat, 0);
+
+      for (i = 0; i < n; ++i)
+	{
+	  rtx ele = XVECEXP (pat, 0, i);
+
+	  if (GET_CODE (ele) != SET)
+	    continue;
+
+	  dest = SET_DEST (ele);
+	  src = SET_SRC (ele);
+
+	  if (GET_CODE (dest) == REG &&
+	      REGNO (dest) == wanted_regnum &&
+	      GET_CODE (src) == MEM &&
+	      GET_CODE (XEXP (src, 0)) == PLUS &&
+	      XEXP (XEXP (src, 0), 0) == stack_pointer_rtx)
+	  {
+	    result = INTVAL (XEXP (XEXP (src, 0), 1));
+	  }
+
+	  if (GET_CODE (src) == REG &&
+	      REGNO (src) == wanted_regnum &&
+	      GET_CODE (dest) == MEM &&
+	      GET_CODE (XEXP (dest, 0)) == PLUS &&
+	      XEXP (XEXP (dest, 0), 0) == stack_pointer_rtx)
+	  {
+	    result = INTVAL (XEXP (XEXP (dest, 0), 1));
+	  }
+	}
+    }
+
+  return result;
+}
+
+static void
+seh_pattern_emit (FILE *f, struct seh_frame_state *seh, rtx pat)
+{
+  rtx dest, src;
+
+   if (GET_CODE (pat) == PARALLEL)
+    {
+      int i, n = XVECLEN (pat, 0);
+      HOST_WIDE_INT regno, min_regno = 32;
+      int reg_count = 0;
+      HOST_WIDE_INT increment = 0;
+
+      for (i = 0; i < n; ++i)
+	{
+	  rtx ele = XVECEXP (pat, 0, i);
+
+	  if (GET_CODE (ele) != SET)
+	    continue;
+
+	  dest = SET_DEST (ele);
+	  src = SET_SRC (ele);
+
+	  if (GET_CODE (dest) == REG &&
+	      GET_CODE (src) == PLUS &&
+	      XEXP (src, 0) == stack_pointer_rtx)
+	  {
+	    increment = INTVAL (XEXP (src, 1));
+	  }
+
+	  if (!seh->after_prologue && GET_CODE (src) == REG)
+	  {
+	    regno = REGNO (src);
+
+	    if (CALLEE_SAVED_REG_NUMBER(regno))
+	      {
+		reg_count += 1;
+		min_regno = MIN(regno, min_regno);
+	      }
+	  }
+
+	  if (seh->after_prologue && GET_CODE (dest) == REG)
+	    {
+	      regno = REGNO (dest);
+
+	      if (CALLEE_SAVED_REG_NUMBER(regno))
+	      {
+		reg_count += 1;
+		min_regno = MIN(regno, min_regno);
+	      }
+	    }
+	}
+
+      if (reg_count == 2)
+      {
+	fprintf (f, "\t.seh_save_%s	x%ld, %ld\n",
+	  increment != 0 ? "regp_x" : "regp",
+	  min_regno,
+	  increment != 0 ? abs(increment) : seh_parallel_offset (pat, min_regno));
+      }
+    }
+  else
+    {
+      src = SET_SRC (pat);
+
+      if (GET_CODE (pat) == SET)
+      {
+	HOST_WIDE_INT increment = 0;
+	dest = SET_DEST (pat);
+
+	switch (GET_CODE (dest))
+	  {
+	  case REG:
+	    switch (GET_CODE (src))
+	      {
+	      case REG:
+		if (dest == hard_frame_pointer_rtx &&
+		    src == stack_pointer_rtx)
+		  fputs ("\t.seh_set_fp\n", f);
+		else if (CALLEE_SAVED_REG_NUMBER(REGNO (dest)) &&
+		    src == stack_pointer_rtx)
+		  seh_emit_save(f, seh, dest, INTVAL (XEXP (src, 1)));
+		break;
+
+	      case PLUS:
+		increment = INTVAL (XEXP (src, 1));
+		src = XEXP (src, 0);
+		if (dest == stack_pointer_rtx)
+		  seh_emit_stackalloc (f, seh, increment);
+		break;
+
+	      case MEM:
+		src = XEXP (src, 0);
+		if (GET_CODE (src) == PLUS &&
+		    GET_CODE (XEXP (src, 0)) == REG &&
+		    CALLEE_SAVED_REG_NUMBER(REGNO (dest)) &&
+		    XEXP (src, 0) == stack_pointer_rtx)
+		  seh_emit_save (f, seh, dest, INTVAL (XEXP (src, 1)));
+		break;
+
+	      default:
+		break;
+	      }
+	    break;
+
+	  case MEM: // Save
+	    dest = XEXP (dest, 0);
+	    if (GET_CODE (dest) == PRE_DEC &&
+		CALLEE_SAVED_REG_NUMBER(REGNO (src)) &&
+		XEXP (dest, 0) == stack_pointer_rtx)
+	      seh_emit_save (f, seh, src, INTVAL (XEXP (dest, 1)));
+	    else if (GET_CODE (dest) == PLUS &&
+		CALLEE_SAVED_REG_NUMBER(REGNO (src)) &&
+		XEXP (dest, 0) == stack_pointer_rtx)
+	      seh_emit_save (f, seh, src, INTVAL (XEXP (dest, 1)));
+	    break;
+
+	  default:
+	    break;
+	  }
+      }
+      else if (seh->after_prologue && (GET_CODE (pat) == RETURN ||
+	GET_CODE (pat) == JUMP_INSN))
+	fputs ("\t.seh_endepilogue\n", f);
+    }
+}
+
+/* This function looks at a single insn and emits any SEH directives
+   required for unwind of this insn.  */
+
 void
-i386_pe_seh_emit_except_personality (rtx personality)
+aarch64_pe_seh_unwind_emit (FILE *out_file, rtx_insn *insn)
+{
+  rtx note, pat;
+  struct seh_frame_state *seh;
+
+  if (!TARGET_SEH)
+    return;
+
+  if (NOTE_P (insn))
+    return;
+
+  seh = cfun->machine->seh;
+
+  if (!seh || seh->after_prologue)
+    return;
+
+  pat = PATTERN (insn);
+
+  if (GET_CODE (pat) == SET)
+    {
+       rtx dest = SET_DEST (pat);
+       if (GET_CODE (dest) == MEM && GET_CODE (XEXP (dest, 0)) == SCRATCH)
+	 return;
+    }
+
+  bool related_exp_needed = true;
+
+  for (note = REG_NOTES (insn); note ; note = XEXP (note, 1))
+    {
+      switch (REG_NOTE_KIND (note))
+	{
+	case REG_FRAME_RELATED_EXPR:
+	  pat = XEXP (note, 0);
+	  seh_pattern_emit (out_file, seh, pat);
+	  related_exp_needed = false;
+	  break;
+
+	case REG_CFA_EXPRESSION:
+	case REG_CFA_REGISTER:
+	case REG_CFA_ADJUST_CFA:
+	case REG_CFA_OFFSET:
+	  related_exp_needed = false;
+	  break;
+
+	default:
+	  break;
+	}
+    }
+
+  if (related_exp_needed)
+    {
+      pat = PATTERN (insn);
+      seh_pattern_emit (out_file, seh, pat);
+    }
+}
+
+void
+mingw_pe_seh_emit_except_personality (rtx personality)
 {
   int flags = 0;
 
@@ -1364,7 +1614,7 @@ i386_pe_seh_emit_except_personality (rtx personality)
 }
 
 void
-i386_pe_seh_init_sections (void)
+mingw_pe_seh_init_sections (void)
 {
   if (TARGET_SEH)
     exception_section = get_unnamed_section (0, output_section_asm_op,
@@ -1383,15 +1633,15 @@ i386_pe_start_function (FILE *f, const char *name, tree decl)
 }
 
 void
-i386_pe_end_function (FILE *f, const char *, tree)
+mingw_pe_end_function (FILE *f, const char *, tree)
 {
-  i386_pe_seh_fini (f, false);
+  mingw_pe_seh_fini (f, false);
 }
-
+
 void
-i386_pe_end_cold_function (FILE *f, const char *, tree)
+mingw_pe_end_cold_function (FILE *f, const char *, tree)
 {
-  i386_pe_seh_fini (f, true);
+  mingw_pe_seh_fini (f, true);
 }
 
 #include "gt-winnt.h"

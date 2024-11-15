@@ -869,6 +869,8 @@ static const attribute_spec aarch64_gnu_attributes[] =
   { "Advanced SIMD type", 1, 1, false, true,  false, true,  NULL, NULL },
   { "SVE type",		  3, 3, false, true,  false, true,  NULL, NULL },
   { "SVE sizeless type",  0, 0, false, true,  false, true,  NULL, NULL },
+  { "cdecl",		  0, 0, false, false, false, false, NULL, NULL },
+  { "stdcall",		  0, 0, false, false, false, false, NULL, NULL },
 #if TARGET_DLLIMPORT_DECL_ATTRIBUTES
   { "dllimport", 0, 0, false, false, false, false, handle_dll_attribute, NULL },
   { "dllexport", 0, 0, false, false, false, false, handle_dll_attribute, NULL },

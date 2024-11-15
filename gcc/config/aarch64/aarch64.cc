@@ -12773,6 +12773,12 @@ aarch64_label_mentioned_p (rtx x)
   return 0;
 }
 
+void
+aarch64_print_reg (rtx x, int code, FILE *file)
+{
+  aarch64_print_operand (file, x, code);
+}
+
 /* Implement REGNO_REG_CLASS.  */
 
 enum reg_class
@@ -18468,6 +18474,12 @@ aarch64_override_options_after_change_1 (struct gcc_options *opts)
      intermediary step for the former.  */
   if (flag_mlow_precision_sqrt)
     flag_mrecip_low_precision_sqrt = true;
+
+  /* Enable unwind tables for MS.  */
+#if defined (TARGET_AARCH64_MS_ABI)
+  if (opts->x_flag_unwind_tables == 0)
+    opts->x_flag_unwind_tables = 1;
+#endif // TARGET_AARCH64_MS_ABI
 }
 
 /* 'Unpack' up the internal tuning structs and update the options
@@ -24903,6 +24915,9 @@ aarch64_declare_function_name (FILE *stream, const char* name,
 
   /* Don't forget the type directive for ELF.  */
   ASM_OUTPUT_TYPE_DIRECTIVE (stream, name, "function");
+#ifdef SUBTARGET_ASM_UNWIND_INIT
+  SUBTARGET_ASM_UNWIND_INIT (stream);
+#endif
   ASM_OUTPUT_FUNCTION_LABEL (stream, name, fndecl);
 
   cfun->machine->label_is_assembled = true;

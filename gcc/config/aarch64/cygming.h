@@ -45,14 +45,39 @@ along with GCC; see the file COPYING3.  If not see
 #define SYMBOL_REF_STUBVAR_P(X) \
 	((SYMBOL_REF_FLAGS (X) & SYMBOL_FLAG_STUBVAR) != 0)
 
-/* Disable SEH and declare the required SEH-related macros that are
+/* Declare the required SEH-related macros that are
 still needed for compilation.  */
 #undef TARGET_SEH
-#define TARGET_SEH 0
+#define TARGET_SEH 1
 
 #define SSE_REGNO_P(N) (gcc_unreachable (), 0)
 #define GENERAL_REGNO_P(N) (gcc_unreachable (), 0)
-#define SEH_MAX_FRAME_SIZE (gcc_unreachable (), 0)
+
+/* Support hooks for SEH.  */
+#undef  TARGET_ASM_UNWIND_EMIT
+#define TARGET_ASM_UNWIND_EMIT  aarch64_pe_seh_unwind_emit
+#undef  TARGET_ASM_UNWIND_EMIT_BEFORE_INSN
+#define TARGET_ASM_UNWIND_EMIT_BEFORE_INSN  false
+#undef  TARGET_ASM_FUNCTION_END_PROLOGUE
+#define TARGET_ASM_FUNCTION_END_PROLOGUE  mingw_pe_seh_end_prologue
+#undef  TARGET_ASM_EMIT_EXCEPT_PERSONALITY
+#define TARGET_ASM_EMIT_EXCEPT_PERSONALITY mingw_pe_seh_emit_except_personality
+#undef  TARGET_ASM_INIT_SECTIONS
+#define TARGET_ASM_INIT_SECTIONS  mingw_pe_seh_init_sections
+#undef  SUBTARGET_ASM_UNWIND_INIT
+#define SUBTARGET_ASM_UNWIND_INIT  mingw_pe_seh_init
+
+/* According to Windows x64 software convention, the maximum stack allocatable
+   in the prologue is 4G - 8 bytes.  Furthermore, there is a limited set of
+   instructions allowed to adjust the stack pointer in the epilog, forcing the
+   use of frame pointer for frames larger than 2 GB.  This theorical limit
+   is reduced by 256, an over-estimated upper bound for the stack use by the
+   prologue.
+   We define only one threshold for both the prolog and the epilog.  When the
+   frame size is larger than this threshold, we allocate the area to save SSE
+   regs, then save them, and then allocate the remaining.  There is no SEH
+   unwind info for this later allocation.  */
+#define SEH_MAX_FRAME_SIZE ((2U << 30) - 256)
 
 #undef TARGET_PECOFF
 #define TARGET_PECOFF 1
@@ -69,6 +94,9 @@ still needed for compilation.  */
 
 #define TARGET_ASM_UNIQUE_SECTION mingw_pe_unique_section
 #define TARGET_ENCODE_SECTION_INFO  mingw_pe_encode_section_info
+
+extern void aarch64_pe_seh_unwind_emit (FILE *, rtx_insn *);
+extern void aarch64_print_reg (rtx, int, FILE*);
 
 #define TARGET_VALID_DLLIMPORT_ATTRIBUTE_P mingw_pe_valid_dllimport_attribute_p
 
@@ -118,6 +146,7 @@ still needed for compilation.  */
       builtin_define ("__MSVCRT__");					\
       builtin_define ("__MINGW32__");					\
       builtin_define ("_WIN32");					\
+      builtin_define ("__SEH__");					\
       builtin_define_std ("WIN32");					\
       builtin_define_std ("WINNT");					\
       builtin_define_with_int_value ("_INTEGRAL_MAX_BITS",		\
@@ -203,6 +232,14 @@ still needed for compilation.  */
     flag_stack_check = STATIC_BUILTIN_STACK_CHECK;	\
   } while (0)
 
+#undef ASM_DECLARE_FUNCTION_SIZE
+#define ASM_DECLARE_FUNCTION_SIZE(FILE,NAME,DECL) \
+  mingw_pe_end_function (FILE, NAME, DECL)
+
+#undef ASM_DECLARE_COLD_FUNCTION_SIZE
+#define ASM_DECLARE_COLD_FUNCTION_SIZE(FILE,NAME,DECL) \
+  mingw_pe_end_cold_function (FILE, NAME, DECL)
+
 #define SUBTARGET_ATTRIBUTE_TABLE \
   { "selectany", 0, 0, true, false, false, false, \
     mingw_handle_selectany_attribute, NULL }
@@ -228,6 +265,14 @@ still needed for compilation.  */
     aarch64_declare_function_name (STREAM, NAME, DECL);			\
   } while (0)
 
+#define ASM_DECLARE_COLD_FUNCTION_NAME(FILE, NAME, DECL)	\
+  do								\
+    {								\
+      mingw_pe_declare_type (FILE, NAME, 0, 1);		\
+      mingw_pe_seh_cold_init (FILE, NAME);			\
+      ASM_OUTPUT_LABEL (FILE, NAME);				\
+    }								\
+  while (0)
 
 /* Define this to be nonzero if static stack checking is supported.  */
 #define STACK_CHECK_STATIC_BUILTIN 1

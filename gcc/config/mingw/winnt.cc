@@ -882,7 +882,7 @@ struct seh_frame_state
 /* Set up data structures beginning output for SEH.  */
 
 void
-i386_pe_seh_init (FILE *f)
+mingw_pe_seh_init (FILE *f)
 {
   struct seh_frame_state *seh;
 
@@ -910,7 +910,7 @@ i386_pe_seh_init (FILE *f)
 /* Emit an assembler directive for the end of the prologue.  */
 
 void
-i386_pe_seh_end_prologue (FILE *f)
+mingw_pe_seh_end_prologue (FILE *f)
 {
   if (!TARGET_SEH)
     return;
@@ -923,7 +923,7 @@ i386_pe_seh_end_prologue (FILE *f)
 /* Emit assembler directives to reconstruct the SEH state.  */
 
 void
-i386_pe_seh_cold_init (FILE *f, const char *name)
+mingw_pe_seh_cold_init (FILE *f, const char *name)
 {
   struct seh_frame_state *seh;
   HOST_WIDE_INT alloc_offset, offset;
@@ -1006,7 +1006,7 @@ i386_pe_seh_cold_init (FILE *f, const char *name)
 /* Emit an assembler directive for the end of the function.  */
 
 static void
-i386_pe_seh_fini (FILE *f, bool cold)
+mingw_pe_seh_fini (FILE *f, bool cold)
 {
   struct seh_frame_state *seh;
 
@@ -1330,7 +1330,7 @@ i386_pe_seh_unwind_emit (FILE *out_file, rtx_insn *insn)
 }
 
 void
-i386_pe_seh_emit_except_personality (rtx personality)
+mingw_pe_seh_emit_except_personality (rtx personality)
 {
   int flags = 0;
 
@@ -1364,7 +1364,7 @@ i386_pe_seh_emit_except_personality (rtx personality)
 }
 
 void
-i386_pe_seh_init_sections (void)
+mingw_pe_seh_init_sections (void)
 {
   if (TARGET_SEH)
     exception_section = get_unnamed_section (0, output_section_asm_op,
@@ -1383,15 +1383,15 @@ i386_pe_start_function (FILE *f, const char *name, tree decl)
 }
 
 void
-i386_pe_end_function (FILE *f, const char *, tree)
+mingw_pe_end_function (FILE *f, const char *, tree)
 {
-  i386_pe_seh_fini (f, false);
+  mingw_pe_seh_fini (f, false);
 }
-
+
 void
-i386_pe_end_cold_function (FILE *f, const char *, tree)
+mingw_pe_end_cold_function (FILE *f, const char *, tree)
 {
-  i386_pe_seh_fini (f, true);
+  mingw_pe_seh_fini (f, true);
 }
 
 #include "gt-winnt.h"

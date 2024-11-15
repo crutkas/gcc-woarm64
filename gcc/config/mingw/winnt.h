@@ -27,12 +27,20 @@ extern void mingw_pe_asm_lto_start (void);
 extern void mingw_pe_asm_lto_end (void);
 extern void mingw_pe_declare_type (FILE *, const char *, bool, bool);
 extern void mingw_pe_encode_section_info (tree, rtx, int);
+extern void mingw_pe_end_cold_function (FILE *, const char *, tree);
+extern void mingw_pe_end_function (FILE *, const char *, tree);
 extern void mingw_pe_file_end (void);
 extern void mingw_pe_maybe_record_exported_symbol (tree, const char *, int);
 extern void mingw_pe_record_stub (const char *, bool);
 extern unsigned int mingw_pe_section_type_flags (tree, const char *, int);
 extern void mingw_pe_unique_section (tree, int);
 extern bool mingw_pe_valid_dllimport_attribute_p (const_tree);
+
+extern void mingw_pe_seh_init (FILE *);
+extern void mingw_pe_seh_init_sections (void);
+extern void mingw_pe_seh_cold_init (FILE *, const char *);
+extern void mingw_pe_seh_emit_except_personality (rtx);
+extern void mingw_pe_seh_end_prologue (FILE *);
 
 #endif /* not USED_FOR_TARGET.  */
 

@@ -883,7 +883,7 @@ x86_64-*-cygwin*)
 	        # biarch -m32 with --disable-sjlj-exceptions
 	     	tmake_eh_file="i386/t-dw2-eh"
 	else
-		tmake_eh_file="i386/t-seh-eh"
+		tmake_eh_file="mingw/t-seh-eh"
 	fi
 	# Shared libgcc DLL install dir depends on cross/native build.
 	if test x${build} = x${host} ; then
@@ -945,7 +945,7 @@ x86_64-*-mingw*)
 	     	tmake_eh_file="i386/t-dw2-eh"
 		md_unwind_header=i386/w32-unwind.h
 	else
-		tmake_eh_file="i386/t-seh-eh"
+		tmake_eh_file="mingw/t-seh-eh"
 	fi
 	# Shared libgcc DLL install dir depends on cross/native build.
 	if test x${build} = x${host} ; then

@@ -74,12 +74,18 @@ along with GCC; see the file COPYING3.  If not see
 #undef TARGET_PECOFF
 #define TARGET_PECOFF 1
 
-// #if ! defined (USE_MINGW64_LEADING_UNDERSCORES)
-// #undef USER_LABEL_PREFIX
-// #define USER_LABEL_PREFIX (TARGET_64BIT ? "" : "_")
+#if ! defined (USE_MINGW64_LEADING_UNDERSCORES)
+#undef USER_LABEL_PREFIX
+#define USER_LABEL_PREFIX (TARGET_64BIT ? "" : "_")
 
-// #undef LOCAL_LABEL_PREFIX
-// #define LOCAL_LABEL_PREFIX (TARGET_64BIT ? "." : "")
+#undef LOCAL_LABEL_PREFIX
+#define LOCAL_LABEL_PREFIX (TARGET_64BIT ? "." : "")
+
+#undef ASM_GENERATE_INTERNAL_LABEL
+#define ASM_GENERATE_INTERNAL_LABEL(BUF,PREFIX,NUMBER)  \
+  sprintf ((BUF), "*%s%s%ld", LOCAL_LABEL_PREFIX, \
+	   (PREFIX), (long)(NUMBER))
+#endif
 
 #include <stdbool.h>
 #ifdef __MINGW32__

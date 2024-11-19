@@ -24,14 +24,12 @@ along with GCC; see the file COPYING3.  If not see
       builtin_define ("__CYGWIN__");				\
       if (!TARGET_64BIT)					\
 	builtin_define ("__CYGWIN32__");			\
-      builtin_define ("__unix__");				\
-      builtin_define ("__unix");				\
+      builtin_define_std ("unix");				\
     }								\
   while (0)
 
 #undef CPP_SPEC
 #define CPP_SPEC "%(cpp_cpu) %{posix:-D_POSIX_SOURCE} \
-  %{!ansi:-Dunix} \
   %{pthread:-D_REENTRANT} \
   %{mwin32:-DWIN32 -D_WIN32 -D__WIN32 -D__WIN32__ %{!ansi:-DWINNT}} \
   %{!nostdinc:%{!mno-win32:-idirafter ../include/w32api%s -idirafter ../../include/w32api%s}}\
@@ -93,6 +91,7 @@ along with GCC; see the file COPYING3.  If not see
 
 /* To implement C++ function replacement we always wrap the cxx
    malloc-like operators.  See N2800 #17.6.4.6 [replacement.functions] */
+#undef CXX_WRAP_SPEC_LIST
 #define CXX_WRAP_SPEC_LIST " \
   --wrap _Znwj \
   --wrap _Znaj \
@@ -131,6 +130,7 @@ along with GCC; see the file COPYING3.  If not see
   %{static:-Bstatic} %{!static:-Bdynamic} \
   %{shared|mdll: --enable-auto-image-base -e __cygwin_dll_entry@12} \
   --dll-search-prefix=cyg \
+  %{rdynamic: --export-all-symbols} \
   %{!shared: %{!mdll: --large-address-aware --tsaware}}"
 
 /* Binutils does not handle weak symbols from dlls correctly.  For now,

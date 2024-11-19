@@ -146,14 +146,17 @@
 #define MALLOC_ABI_ALIGNMENT  128
 
 /* Defined by the ABI */
+#undef WCHAR_TYPE
 #define WCHAR_TYPE "unsigned int"
+#undef WCHAR_TYPE_SIZE
 #define WCHAR_TYPE_SIZE			32
 
 /* Using long long breaks -ansi and -std=c90, so these will need to be
    made conditional for an LLP64 ABI.  */
-
+#undef SIZE_TYPE
 #define SIZE_TYPE	"long unsigned int"
 
+#undef PTRDIFF_TYPE
 #define PTRDIFF_TYPE	"long int"
 
 #define PCC_BITFIELD_TYPE_MATTERS	1

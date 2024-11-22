@@ -66,6 +66,8 @@
 
 #include <filesystem> // std::filesystem::remove_all
 
+#undef _GLIBCXX_HAVE_SYS_STAT_H
+
 namespace fs = std::experimental::filesystem;
 namespace posix = std::filesystem::__gnu_posix;
 
@@ -275,107 +277,107 @@ void
 fs::copy(const path& from, const path& to, copy_options options,
 	 error_code& ec) noexcept
 {
-  const bool skip_symlinks = is_set(options, copy_options::skip_symlinks);
-  const bool create_symlinks = is_set(options, copy_options::create_symlinks);
-  const bool copy_symlinks = is_set(options, copy_options::copy_symlinks);
-  const bool use_lstat = create_symlinks || skip_symlinks;
+  // const bool skip_symlinks = is_set(options, copy_options::skip_symlinks);
+  // const bool create_symlinks = is_set(options, copy_options::create_symlinks);
+  // const bool copy_symlinks = is_set(options, copy_options::copy_symlinks);
+  // const bool use_lstat = create_symlinks || skip_symlinks;
 
-  file_status f, t;
-  stat_type from_st, to_st;
-  // _GLIBCXX_RESOLVE_LIB_DEFECTS
-  // 2681. filesystem::copy() cannot copy symlinks
-  if (use_lstat || copy_symlinks
-      ? posix::lstat(from.c_str(), &from_st)
-      : posix::stat(from.c_str(), &from_st))
-    {
-      ec.assign(errno, std::generic_category());
-      return;
-    }
-  if (use_lstat
-      ? posix::lstat(to.c_str(), &to_st)
-      : posix::stat(to.c_str(), &to_st))
-    {
-      if (!is_not_found_errno(errno))
-	{
-	  ec.assign(errno, std::generic_category());
-	  return;
-	}
-      t = file_status{file_type::not_found};
-    }
-  else
-    t = make_file_status(to_st);
-  f = make_file_status(from_st);
+  // file_status f, t;
+  // stat_type from_st, to_st;
+  // // _GLIBCXX_RESOLVE_LIB_DEFECTS
+  // // 2681. filesystem::copy() cannot copy symlinks
+  // if (use_lstat || copy_symlinks
+  //     ? posix::lstat(from.c_str(), &from_st)
+  //     : posix::stat(from.c_str(), &from_st))
+  //   {
+  //     ec.assign(errno, std::generic_category());
+  //     return;
+  //   }
+  // if (use_lstat
+  //     ? posix::lstat(to.c_str(), &to_st)
+  //     : posix::stat(to.c_str(), &to_st))
+  //   {
+  //     if (!is_not_found_errno(errno))
+	// {
+	//   ec.assign(errno, std::generic_category());
+	//   return;
+	// }
+  //     t = file_status{file_type::not_found};
+  //   }
+  // else
+  //   t = make_file_status(to_st);
+  // f = make_file_status(from_st);
 
-  if (exists(t) && !is_other(t) && !is_other(f)
-      && fs::equiv_files(from.c_str(), from_st, to.c_str(), to_st, ec))
-    {
-      ec = std::make_error_code(std::errc::file_exists);
-      return;
-    }
-  if (is_other(f) || is_other(t))
-    {
-      ec = std::make_error_code(std::errc::invalid_argument);
-      return;
-    }
-  if (is_directory(f) && is_regular_file(t))
-    {
-      ec = std::make_error_code(std::errc::is_a_directory);
-      return;
-    }
+  // if (exists(t) && !is_other(t) && !is_other(f)
+  //     && fs::equiv_files(from.c_str(), from_st, to.c_str(), to_st, ec))
+  //   {
+  //     ec = std::make_error_code(std::errc::file_exists);
+  //     return;
+  //   }
+  // if (is_other(f) || is_other(t))
+  //   {
+  //     ec = std::make_error_code(std::errc::invalid_argument);
+  //     return;
+  //   }
+  // if (is_directory(f) && is_regular_file(t))
+  //   {
+  //     ec = std::make_error_code(std::errc::is_a_directory);
+  //     return;
+  //   }
 
-  if (is_symlink(f))
-    {
-      if (skip_symlinks)
-	ec.clear();
-      else if (!exists(t) && copy_symlinks)
-	copy_symlink(from, to, ec);
-      else
-	// Not clear what should be done here.
-	// "Otherwise report an error as specified in Error reporting (7)."
-	ec = std::make_error_code(std::errc::invalid_argument);
-    }
-  else if (is_regular_file(f))
-    {
-      if (is_set(options, copy_options::directories_only))
-	ec.clear();
-      else if (create_symlinks)
-	create_symlink(from, to, ec);
-      else if (is_set(options, copy_options::create_hard_links))
-	create_hard_link(from, to, ec);
-      else if (is_directory(t))
-	do_copy_file(from.c_str(), (to / from.filename()).c_str(),
-		     copy_file_options(options), &from_st, nullptr, ec);
-      else
-	{
-	  auto ptr = exists(t) ? &to_st : &from_st;
-	  do_copy_file(from.c_str(), to.c_str(), copy_file_options(options),
-		       &from_st, ptr,  ec);
-	}
-    }
-  // _GLIBCXX_RESOLVE_LIB_DEFECTS
-  // 2682. filesystem::copy() won't create a symlink to a directory
-  else if (is_directory(f) && create_symlinks)
-    ec = std::make_error_code(errc::is_a_directory);
-  else if (is_directory(f) && (is_set(options, copy_options::recursive)
-			       || options == copy_options::none))
-    {
-      if (!exists(t))
-	if (!create_directory(to, from, ec))
-	  return;
-      // set an unused bit in options to disable further recursion
-      if (!is_set(options, copy_options::recursive))
-	options |= static_cast<copy_options>(4096);
-      for (const directory_entry& x : directory_iterator(from, ec))
-	{
-	  copy(x.path(), to/x.path().filename(), options, ec);
-	  if (ec)
-	    return;
-	}
-    }
-  // _GLIBCXX_RESOLVE_LIB_DEFECTS
-  // 2683. filesystem::copy() says "no effects"
-  else
-    ec.clear();
+  // if (is_symlink(f))
+  //   {
+  //     if (skip_symlinks)
+	// ec.clear();
+  //     else if (!exists(t) && copy_symlinks)
+	// copy_symlink(from, to, ec);
+  //     else
+	// // Not clear what should be done here.
+	// // "Otherwise report an error as specified in Error reporting (7)."
+	// ec = std::make_error_code(std::errc::invalid_argument);
+  //   }
+  // else if (is_regular_file(f))
+  //   {
+  //     if (is_set(options, copy_options::directories_only))
+	// ec.clear();
+  //     else if (create_symlinks)
+	// create_symlink(from, to, ec);
+  //     else if (is_set(options, copy_options::create_hard_links))
+	// create_hard_link(from, to, ec);
+  //     else if (is_directory(t))
+	// do_copy_file(from.c_str(), (to / from.filename()).c_str(),
+	// 	     copy_file_options(options), &from_st, nullptr, ec);
+  //     else
+	// {
+	//   auto ptr = exists(t) ? &to_st : &from_st;
+	//   do_copy_file(from.c_str(), to.c_str(), copy_file_options(options),
+	// 	       &from_st, ptr,  ec);
+	// }
+  //   }
+  // // _GLIBCXX_RESOLVE_LIB_DEFECTS
+  // // 2682. filesystem::copy() won't create a symlink to a directory
+  // else if (is_directory(f) && create_symlinks)
+  //   ec = std::make_error_code(errc::is_a_directory);
+  // else if (is_directory(f) && (is_set(options, copy_options::recursive)
+	// 		       || options == copy_options::none))
+  //   {
+  //     if (!exists(t))
+	// if (!create_directory(to, from, ec))
+	//   return;
+  //     // set an unused bit in options to disable further recursion
+  //     if (!is_set(options, copy_options::recursive))
+	// options |= static_cast<copy_options>(4096);
+  //     for (const directory_entry& x : directory_iterator(from, ec))
+	// {
+	//   copy(x.path(), to/x.path().filename(), options, ec);
+	//   if (ec)
+	//     return;
+	// }
+  //   }
+  // // _GLIBCXX_RESOLVE_LIB_DEFECTS
+  // // 2683. filesystem::copy() says "no effects"
+  // else
+  //   ec.clear();
 }
 
 bool
@@ -827,23 +829,23 @@ namespace
 std::uintmax_t
 fs::file_size(const path& p, error_code& ec) noexcept
 {
-  struct S
-  {
-    S(const stat_type& st) : type(make_file_type(st)), size(st.st_size) { }
-    S() : type(file_type::not_found) { }
-    file_type type;
-    uintmax_t size;
-  };
-  auto s = do_stat(p, ec, [](const auto& st) { return S{st}; }, S{});
-  if (s.type == file_type::regular)
-    return s.size;
-  if (!ec)
-    {
-      if (s.type == file_type::directory)
-	ec = std::make_error_code(std::errc::is_a_directory);
-      else
-	ec = std::__unsupported();
-    }
+  // struct S
+  // {
+  //   S(const stat_type& st) : type(make_file_type(st)), size(st.st_size) { }
+  //   S() : type(file_type::not_found) { }
+  //   file_type type;
+  //   uintmax_t size;
+  // };
+  // auto s = do_stat(p, ec, [](const auto& st) { return S{st}; }, S{});
+  // if (s.type == file_type::regular)
+  //   return s.size;
+  // if (!ec)
+  //   {
+  //     if (s.type == file_type::directory)
+	// ec = std::make_error_code(std::errc::is_a_directory);
+  //     else
+	// ec = std::__unsupported();
+  //   }
   return -1;
 }
 
@@ -860,8 +862,9 @@ fs::hard_link_count(const path& p)
 std::uintmax_t
 fs::hard_link_count(const path& p, error_code& ec) noexcept
 {
-  return do_stat(p, ec, std::mem_fn(&stat_type::st_nlink),
-		 static_cast<uintmax_t>(-1));
+  return 0;
+  // return do_stat(p, ec, std::mem_fn(&stat_type::st_nlink),
+	// 	 static_cast<uintmax_t>(-1));
 }
 
 bool
@@ -1191,7 +1194,7 @@ fs::space(const path& p, error_code& ec) noexcept
 #else
   auto str = p.c_str();
 #endif
-  fs::do_space(str, info.capacity, info.free, info.available, ec);
+  // fs::do_space(str, info.capacity, info.free, info.available, ec);
   return info;
 }
 

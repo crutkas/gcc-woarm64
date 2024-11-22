@@ -134,6 +134,8 @@ extern void i386_pe_record_external_function (tree, const char *);
 #define TARGET_OS_CPP_BUILTINS()					\
   do									\
     {									\
+      builtin_define ("__CYGWIN__");				\
+      builtin_define ("__CYGWIN32__");				\
       builtin_define ("__MSVCRT__");					\
       builtin_define ("__MINGW32__");					\
       builtin_define ("_WIN32");					\

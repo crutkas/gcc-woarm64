@@ -46,6 +46,9 @@
 # include <wchar.h>
 #endif
 
+#undef NEED_DO_COPY_FILE
+#undef _GLIBCXX_HAVE_SYS_STAT_H
+
 #ifdef NEED_DO_COPY_FILE
 # include <filesystem>
 # include <ext/stdio_filebuf.h>
@@ -57,6 +60,9 @@
 #  include <unistd.h> // lseek
 # endif
 #endif
+
+#undef _GLIBCXX_FILESYSTEM_IS_WINDOWS
+#undef _GLIBCXX_HAVE_UNISTD_H
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {

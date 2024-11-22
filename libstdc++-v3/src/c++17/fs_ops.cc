@@ -64,6 +64,15 @@
 
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+#undef _GLIBCXX_USE_MKDIR
+#undef _GLIBCXX_HAVE_LINK
+#undef _GLIBCXX_HAVE_SYMLINK
+#undef _GLIBCXX_USE_GETCWD
+#undef _GLIBCXX_USE_CHDIR
+#undef _GLIBCXX_USE_FCHMODAT
+#undef _GLIBCXX_USE_CHMOD
+
+
 namespace fs = std::filesystem;
 namespace posix = std::filesystem::__gnu_posix;
 
@@ -1311,15 +1320,15 @@ fs::remove(const path& p, error_code& ec) noexcept
   else if (status_known(st))
     ec.clear();
 #else
-  if (::remove(p.c_str()) == 0)
-    {
-      ec.clear();
-      return true;
-    }
-  else if (errno == ENOENT)
-    ec.clear();
-  else
-    ec.assign(errno, std::generic_category());
+  // if (::remove(p.c_str()) == 0)
+  //   {
+  //     ec.clear();
+  //     return true;
+  //   }
+  // else if (errno == ENOENT)
+  //   ec.clear();
+  // else
+  //   ec.assign(errno, std::generic_category());
 #endif
   return false;
 }
@@ -1458,10 +1467,10 @@ fs::rename(const path& from, const path& to, error_code& ec) noexcept
     }
   }
 #endif
-  if (posix::rename(from.c_str(), to.c_str()))
-    ec.assign(errno, std::generic_category());
-  else
-    ec.clear();
+  // if (posix::rename(from.c_str(), to.c_str()))
+  //   ec.assign(errno, std::generic_category());
+  // else
+  //   ec.clear();
 }
 
 void
@@ -1476,12 +1485,12 @@ fs::resize_file(const path& p, uintmax_t size)
 void
 fs::resize_file(const path& p, uintmax_t size, error_code& ec) noexcept
 {
-  if (size > static_cast<uintmax_t>(std::numeric_limits<posix::off_t>::max()))
-    ec.assign(EINVAL, std::generic_category());
-  else if (posix::truncate(p.c_str(), size))
-    ec.assign(errno, std::generic_category());
-  else
-    ec.clear();
+  // if (size > static_cast<uintmax_t>(std::numeric_limits<posix::off_t>::max()))
+  //   ec.assign(EINVAL, std::generic_category());
+  // else if (posix::truncate(p.c_str(), size))
+  //   ec.assign(errno, std::generic_category());
+  // else
+  //   ec.clear();
 }
 
 

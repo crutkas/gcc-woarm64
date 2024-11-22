@@ -40,6 +40,8 @@ __dfp_get_round (void) {
 #endif
 #endif
 
+#undef DECIMAL_GLOBAL_EXCEPTION_FLAGS
+
 #if DECIMAL_GLOBAL_EXCEPTION_FLAGS
 BID_THREAD _IDEC_flags _IDEC_glbflags = EXACT_STATUS;
 

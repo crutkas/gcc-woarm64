@@ -33,6 +33,9 @@
 #include <ext/stdio_sync_filebuf.h>
 #include <ext/numeric_traits.h>
 
+#undef _WIN32
+#undef _GLIBCXX_HAVE_UNISTD_H
+
 #ifdef _WIN32
 # include <stdio.h>   // _fileno
 # include <io.h>      // _get_osfhandle, _open_osfhandle, _write

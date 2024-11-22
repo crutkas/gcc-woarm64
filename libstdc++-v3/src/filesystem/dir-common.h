@@ -42,6 +42,8 @@
 # endif
 #endif
 
+#undef _GLIBCXX_FILESYSTEM_IS_WINDOWS
+
 namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION

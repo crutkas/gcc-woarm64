@@ -736,7 +736,7 @@ __gthread_self (void)
 __GTHREAD_INLINE int
 __gthread_yield (void)
 {
-  return __gthrw_(sched_yield) ();
+  return 0; //__gthrw_(sched_yield) ();
 }
 
 __GTHREAD_INLINE int
@@ -838,9 +838,8 @@ __gthread_recursive_mutex_init_function (__gthread_recursive_mutex_t *__mutex)
       int __r;
 
       __r = __gthrw_(pthread_mutexattr_init) (&__attr);
-      if (!__r)
-	__r = __gthrw_(pthread_mutexattr_settype) (&__attr,
-						   PTHREAD_MUTEX_RECURSIVE);
+//      if (!__r)
+//	__r = __gthrw_(pthread_mutexattr_settype) (&__attr, PTHREAD_MUTEX_RECURSIVE);
       if (!__r)
 	__r = __gthrw_(pthread_mutex_init) (__mutex, &__attr);
       if (!__r)

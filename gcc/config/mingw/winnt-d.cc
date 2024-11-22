@@ -77,4 +77,4 @@ winnt_d_register_target_info (void)
 #undef TARGET_D_TEMPLATES_ALWAYS_COMDAT
 #define TARGET_D_TEMPLATES_ALWAYS_COMDAT true
 
-struct gcc_targetdm targetdm = TARGETDM_INITIALIZER;
+//struct gcc_targetdm targetdm = TARGETDM_INITIALIZER;

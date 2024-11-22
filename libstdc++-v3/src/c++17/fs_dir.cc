@@ -46,7 +46,7 @@ struct fs::_Dir : _Dir_base
 {
   _Dir(const fs::path& p, bool skip_permission_denied, bool nofollow,
        [[maybe_unused]] bool filename_only, error_code& ec)
-  : _Dir_base(p.c_str(), skip_permission_denied, nofollow, ec)
+  : _Dir_base(_Dir_base::_At_path((const posix::char_type*) p.c_str()), skip_permission_denied, nofollow, ec)
   {
 #if _GLIBCXX_HAVE_DIRFD && _GLIBCXX_HAVE_OPENAT && _GLIBCXX_HAVE_UNLINKAT
     if (filename_only)
@@ -126,10 +126,10 @@ struct fs::_Dir : _Dir_base
     if (!p.empty()) [[__likely__]]
       {
 	auto len = std::prev(p.end())->native().size();
-	return {::dirfd(this->dirp), p.c_str(), p.native().size() - len};
+	return {::dirfd(this->dirp), (const posix::char_type*) p.c_str(), p.native().size() - len};
       }
 #endif
-    return p.c_str();
+    return (const posix::char_type*) p.c_str();
   }
 
   // Create a new _Dir for the directory this->entry.path().

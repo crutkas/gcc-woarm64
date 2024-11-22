@@ -37,6 +37,10 @@
 #include <sys/syscall.h>
 #endif
 
+#undef _GLIBCXX_USE_CLOCK_REALTIME
+#undef _GLIBCXX_USE_GETTIMEOFDAY
+#undef _GLIBCXX_USE_CLOCK_MONOTONIC
+
 namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION

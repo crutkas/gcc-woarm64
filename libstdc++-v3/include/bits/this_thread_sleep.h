@@ -42,6 +42,8 @@
 # include <time.h>  // nanosleep
 #endif
 
+#undef _GLIBCXX_USE_NANOSLEEP
+
 namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION

@@ -31,4 +31,4 @@ LIB2ADDEH += \
 
 SHLIB_MAPFILES += $(srcdir)/config/aarch64/libgcc-sme.ver
 LIBGCC2_CFLAGS += -Werror -Wno-prio-ctor-dtor -Wno-error=attributes -Wno-error=unused-parameter \
-	-Wno-error=missing-prototypes -Wno-error=unused-function
+	-Wno-error=missing-prototypes -Wno-error=unused-function -Wno-error=implicit-function-declaration

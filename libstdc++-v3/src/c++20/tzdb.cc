@@ -684,10 +684,12 @@ namespace std::chrono
 	void decrement() { }
 
 	// Use a mutex to synchronize all access to the infos vector.
-	mutex infos_mutex;
+	// mutex infos_mutex;
 
-	void lock() { infos_mutex.lock(); }
-	void unlock() { infos_mutex.unlock(); }
+	void lock() { //infos_mutex.lock(); 
+	}
+	void unlock() { // infos_mutex.unlock(); 
+	}
       };
 
 #if defined __GTHREADS && __cpp_lib_atomic_wait

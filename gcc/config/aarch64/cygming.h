@@ -153,6 +153,20 @@ still needed for compilation.  */
   (fprintf (asm_out_file, "\t.section\t.drectve\n"), \
    in_section = NULL)
 
+/* This implements the `alias' attribute, keeping any stdcall or
+   fastcall decoration.  */
+#undef	ASM_OUTPUT_DEF_FROM_DECLS
+#define	ASM_OUTPUT_DEF_FROM_DECLS(STREAM, DECL, TARGET)			\
+  do									\
+    {									\
+      const char *alias							\
+	= IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (DECL));		\
+      mingw_pe_maybe_record_exported_symbol (DECL, alias, 0);		\
+      if (TREE_CODE (DECL) == FUNCTION_DECL)				\
+	mingw_pe_declare_type (STREAM, alias,			\
+				       TREE_PUBLIC (DECL), 1);		\
+      ASM_OUTPUT_DEF (STREAM, alias, IDENTIFIER_POINTER (TARGET));	\
+    } while (0)
 
 /* Enable alias attribute support.  */
 #ifndef SET_ASM_OP

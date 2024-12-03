@@ -140,21 +140,14 @@ still needed for compilation.  */
 #define TARGET_OS_CPP_BUILTINS()					\
   do									\
     {									\
-      builtin_define ("__MSVCRT__");					\
-      builtin_define ("__MINGW32__");					\
-      builtin_define ("_WIN32");					\
       builtin_define ("__SEH__");					\
-      builtin_define_std ("WIN32");					\
-      builtin_define_std ("WINNT");					\
       builtin_define_with_int_value ("_INTEGRAL_MAX_BITS",		\
 				TYPE_PRECISION (intmax_type_node));	\
-      builtin_define ("__MINGW64__");					\
-      builtin_define_std ("WIN64");					\
-      builtin_define ("_WIN64");					\
       builtin_define ("__stdcall=__attribute__((__stdcall__))");	\
       builtin_define ("__fastcall=__attribute__((__fastcall__))");	\
       builtin_define ("__thiscall=__attribute__((__thiscall__))");	\
       builtin_define ("__cdecl=__attribute__((__cdecl__))");		\
+      EXTRA_OS_CPP_BUILTINS ();						\
     }									\
   while (0)
 

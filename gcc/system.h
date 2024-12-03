@@ -694,8 +694,9 @@ extern int vsnprintf (char *, size_t, const char *, va_list);
 # endif
 #endif
 
-#if defined (INCLUDE_DLFCN_H) && defined (HAVE_DLFCN_H)
-/* If plugin support is enabled, we could use libdl.  */
+#if defined (INCLUDE_DLFCN_H) && defined (HAVE_DLFCN_H) && (defined (ENABLE_PLUGIN) || defined (__CYGWIN__))
+/* If plugin support is enabled, we could use libdl.
+   On Cygwin libdl is needed for libgccjit but no plugin support is available.  */
 #include <dlfcn.h>
 #endif
 

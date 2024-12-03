@@ -1206,4 +1206,22 @@ extern void aarch64_adjust_reg_alloc_order ();
 bool aarch64_optimize_mode_switching (aarch64_mode_entity);
 void aarch64_restore_za (rtx);
 
+/* SEH support */
+extern void i386_pe_seh_init (FILE *);
+extern void i386_pe_seh_end_prologue (FILE *);
+// extern void aarch64_pe_seh_function_prologue (FILE *);
+// extern void aarch64_pe_seh_cold_init (FILE *, const char *);
+extern void i386_pe_seh_unwind_emit (FILE *, rtx_insn *);
+extern void i386_pe_seh_emit_except_personality (rtx);
+extern void i386_pe_seh_init_sections (void);
+// extern void aarch64_pe_seh_asm_final_postscan_insn (FILE *stream, rtx_insn *insn, rtx*, int);
+
+/* In winnt */
+// extern void aarch64_print_reg (rtx, int, FILE*);
+extern void i386_pe_end_function (FILE *f, const char *, tree);
+extern void i386_pe_end_cold_function (FILE *f, const char *, tree);
+// extern void aarch64_pe_end_epilogue (FILE *file);
+// extern void aarch64_pe_begin_epilogue (FILE *file);
+extern void i386_pe_record_external_function (tree, const char *);
+
 #endif /* GCC_AARCH64_PROTOS_H */

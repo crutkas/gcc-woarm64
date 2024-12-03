@@ -82,11 +82,6 @@ still needed for compilation.  */
 #undef TARGET_PECOFF
 #define TARGET_PECOFF 1
 
-#include <stdbool.h>
-#ifdef __MINGW32__
-#include <stdio.h>
-#endif
-
 #define TARGET_ASM_NAMED_SECTION  mingw_pe_asm_named_section
 
 /* Select attributes for named sections.  */
@@ -143,21 +138,14 @@ extern void aarch64_print_reg (rtx, int, FILE*);
 #define TARGET_OS_CPP_BUILTINS()					\
   do									\
     {									\
-      builtin_define ("__MSVCRT__");					\
-      builtin_define ("__MINGW32__");					\
-      builtin_define ("_WIN32");					\
-      builtin_define ("__SEH__");					\
-      builtin_define_std ("WIN32");					\
-      builtin_define_std ("WINNT");					\
+      builtin_define ("__SEH__");                               \
       builtin_define_with_int_value ("_INTEGRAL_MAX_BITS",		\
 				TYPE_PRECISION (intmax_type_node));	\
-      builtin_define ("__MINGW64__");					\
-      builtin_define_std ("WIN64");					\
-      builtin_define ("_WIN64");					\
       builtin_define ("__stdcall=__attribute__((__stdcall__))");	\
       builtin_define ("__fastcall=__attribute__((__fastcall__))");	\
       builtin_define ("__thiscall=__attribute__((__thiscall__))");	\
       builtin_define ("__cdecl=__attribute__((__cdecl__))");		\
+      EXTRA_OS_CPP_BUILTINS ();						\
     }									\
   while (0)
 

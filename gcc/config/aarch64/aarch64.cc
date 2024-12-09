@@ -28945,8 +28945,10 @@ aarch64_bitint_type_info (int n, struct bitint_info *info)
 static machine_mode
 aarch64_c_mode_for_floating_type (enum tree_index ti)
 {
+#ifndef TARGET_LONG_DOUBLE_64
   if (ti == TI_LONG_DOUBLE_TYPE)
     return TFmode;
+#endif
   return default_mode_for_floating_type (ti);
 }
 

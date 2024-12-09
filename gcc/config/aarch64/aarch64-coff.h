@@ -37,8 +37,7 @@
 #undef LONG_TYPE_SIZE
 #define LONG_TYPE_SIZE 32
 
-#undef LONG_DOUBLE_TYPE_SIZE
-#define LONG_DOUBLE_TYPE_SIZE 64
+#define __NO_BINARY80__
 
 #define TARGET_SEH 1
 

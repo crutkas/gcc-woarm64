@@ -28855,6 +28855,14 @@ aarch64_scalar_mode_supported_p (scalar_mode mode)
   if (DECIMAL_FLOAT_MODE_P (mode))
     return default_decimal_float_supported_p ();
 
+/* If long double is 64bit, we need to explicitly specify that aarch64
+   port is prepared to handle TFmode instructions. If long double is
+   128bit, this is handled by default_scalar_mode_supported_p.  */
+#ifdef TARGET_LONG_DOUBLE_64
+  if (mode == TFmode)
+    return true;
+#endif
+
   return ((mode == HFmode || mode == BFmode)
 	  ? true
 	  : default_scalar_mode_supported_p (mode));

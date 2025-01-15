@@ -1273,10 +1273,12 @@ aarch64*-*-gnu*)
         tm_defines="${tm_defines}  TARGET_DEFAULT_ASYNC_UNWIND_TABLES=1"
 	;;
 aarch64-*-cygwin*)
-	need_64bit_isa=yes
 	tm_file="${tm_file} aarch64/aarch64-abi-ms.h"
 	tm_file="${tm_file} aarch64/aarch64-coff.h"
-	tm_file="${tm_file} aarch64/cygming.h i386/cygwin.h i386/cygwin-w64.h i386/cygwin-stdint.h"
+	tm_file="${tm_file} aarch64/cygming.h"
+	tm_file="${tm_file} i386/cygwin.h"
+	tm_file="${tm_file} i386/cygwin-w64.h"
+	tm_file="${tm_file} i386/cygwin-stdint.h"
 	tm_file="${tm_file} mingw/winnt.h"
 	tm_file="${tm_file} mingw/winnt-dll.h"
 	xm_file=i386/xm-cygwin.h
@@ -1285,7 +1287,7 @@ aarch64-*-cygwin*)
 	target_gtfiles="$target_gtfiles \$(srcdir)/config/mingw/winnt.cc"
 	target_gtfiles="$target_gtfiles \$(srcdir)/config/mingw/winnt-dll.cc"
 	extra_options="${extra_options} mingw/cygming.opt i386/cygwin.opt"
-	extra_objs="${extra_objs} winnt.o winnt-stubs.o winnt-dll.o"
+	extra_objs="${extra_objs} winnt.o winnt-dll.o"
 	c_target_objs="${c_target_objs} msformat-c.o"
 	cxx_target_objs="${cxx_target_objs} winnt-cxx.o msformat-c.o"
 	d_target_objs="${d_target_objs} cygwin-d.o"

@@ -29,14 +29,6 @@
 
 #define L(label) .L ## label
 
-#ifdef __GCC_HAVE_DWARF2_CFI_ASM
-# define cfi_startproc()		.cfi_startproc
-# define cfi_endproc()			.cfi_endproc
-#else
-# define cfi_startproc()
-# define cfi_endproc()
-#endif
-
 /* Marking variant PCS symbol references is important for PLT calls
    otherwise it is for documenting the PCS in the symbol table.  */
 #ifdef HAVE_AS_VARIANT_PCS

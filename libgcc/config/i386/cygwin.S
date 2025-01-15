@@ -23,11 +23,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#if defined(__i386__) || defined(__x86_64__)
 #include "i386-asm.h"
-#elif defined(__aarch64__)
-#include "../aarch64/aarch64-asm.h"
-#endif
 
 #ifdef HAVE_AS_CFI_SECTIONS
 	.cfi_sections	.debug_frame
@@ -41,7 +37,7 @@
 
 	.global ___chkstk
 	.global	__alloca
-#if defined(__x86_64__)
+#ifdef __x86_64__
 /* __alloca is a normal function call, which uses %rcx as the argument.  */
 	cfi_startproc()
 __alloca:
@@ -78,7 +74,7 @@ ___chkstk:
 	pushq	%r11
 	ret
 	cfi_endproc()
-#elif defined(__i386__)
+#else
 	cfi_startproc()
 ___chkstk:
 __alloca:
@@ -107,14 +103,6 @@ __alloca:
 	pushl	4(%eax)
 	ret
 	cfi_endproc()
-#elif defined(__aarch64__)
-	cfi_startproc()
-___chkstk:
-__alloca:
-	// TODO
-	cfi_endproc()
-#else
-	#error "Unsupported architecture"
 #endif /* __x86_64__ */
 #endif /* L_chkstk */
 
@@ -123,7 +111,7 @@ __alloca:
    We avoid clobbering any registers.  Unlike ___chkstk, it just probes the
    stack and does no stack allocation.  */
 	.global ___chkstk_ms
-#if defined(__x86_64__)
+#ifdef __x86_64__
 	cfi_startproc()
 ___chkstk_ms:
 	pushq	%rcx			/* save temps */
@@ -149,7 +137,7 @@ ___chkstk_ms:
 	cfi_pop(%rcx)
 	ret
 	cfi_endproc()
-#elif defined(__i386__)
+#else
 	cfi_startproc()
 ___chkstk_ms:
 	pushl	%ecx			/* save temp */
@@ -175,12 +163,5 @@ ___chkstk_ms:
 	cfi_pop(%ecx)
 	ret
 	cfi_endproc()
-#elif defined(__aarch64__)
-	cfi_startproc()
-___chkstk_ms:
-	// TODO
-	cfi_endproc()
-#else
-	#error "Unsupported architecture"
 #endif /* __x86_64__ */
 #endif /* L_chkstk_ms */

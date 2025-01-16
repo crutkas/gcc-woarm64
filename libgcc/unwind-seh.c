@@ -147,7 +147,7 @@ void *
 _Unwind_FindEnclosingFunction (void *pc)
 {
   PRUNTIME_FUNCTION entry;
-  DWORD_PTR ImageBase;
+  ULONG64 ImageBase;
 
   entry = RtlLookupFunctionEntry ((ULONG64)pc, &ImageBase, NULL);
 

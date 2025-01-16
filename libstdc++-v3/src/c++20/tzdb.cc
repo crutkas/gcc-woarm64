@@ -70,7 +70,7 @@ namespace __gnu_cxx
 #else
   [[gnu::weak]] const char* zoneinfo_dir_override();
 
-#if defined(__APPLE__) || defined(__hpux__) || defined(__aarch64__) \
+#if defined(__APPLE__) || defined(__hpux__) \
   || (defined(__VXWORKS__) && !defined(__RTP__))
   // Need a weak definition for Mach-O et al.
   [[gnu::weak]] const char* zoneinfo_dir_override()

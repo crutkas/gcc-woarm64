@@ -31,8 +31,12 @@
 #undef PTRDIFF_TYPE
 #define PTRDIFF_TYPE	"long long int"
 
+#define TARGET_LONG_DOUBLE_64 1
+
 #undef LONG_TYPE_SIZE
 #define LONG_TYPE_SIZE 32
+
+#define __NO_BINARY80__
 
 #define TARGET_SEH 1
 

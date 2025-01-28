@@ -220,7 +220,12 @@ AM_CONDITIONAL(LIBGFOR_MINIMAL, false)
 # or floating point numbers – or may want to reduce the libgfortran size
 # although they do have the support.
 LIBGOMP_CHECKED_INT_KINDS="1 2 4 8 16"
-LIBGOMP_CHECKED_REAL_KINDS="4 8 10 16"
+case "${host}" in
+  aarch64-*-mingw* | aarch64-*-cygwin*)
+    LIBGOMP_CHECKED_REAL_KINDS="4 8" ;;
+  *)
+    LIBGOMP_CHECKED_REAL_KINDS="4 8 10 16" ;;
+esac
 
 AC_SUBST(LIBGOMP_CHECKED_INT_KINDS)
 AC_SUBST(LIBGOMP_CHECKED_REAL_KINDS)

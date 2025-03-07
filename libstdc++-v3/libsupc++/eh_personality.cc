@@ -505,6 +505,12 @@ PERSONALITY_FUNCTION (int version,
       p = read_encoded_value (0, info.call_site_encoding, p, &cs_lp);
       p = read_uleb128 (p, &cs_action);
 
+#if defined (__aarch64__)
+      const unsigned int max_frag_size = ((1 << 18) - 1) << 2;
+      info.Start -= (cs_start + cs_len - 1) / max_frag_size * max_frag_size;
+      info.LPStart -= (cs_start + cs_len - 1) / max_frag_size * max_frag_size;
+#endif
+
       // The table is sorted, so if we've passed the ip, stop.
       if (ip < info.Start + cs_start)
 	p = info.action_table;

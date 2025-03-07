@@ -476,7 +476,7 @@ aarch64-*-mingw*)
 	    tmake_thr_file="mingw/t-mingw-pthread"
 	    ;;
 	esac
-	tmake_file="${tmake_file} ${tmake_thr_file} mingw/t-seh-eh"
+	tmake_file="${tmake_file} mingw/t-seh-eh ${tmake_thr_file}"
 	tmake_file="${tmake_file} t-dfprules"
 	tmake_file="${tmake_file} ${cpu_type}/t-aarch64"
 	tmake_file="${tmake_file} ${cpu_type}/t-mingw"

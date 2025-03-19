@@ -1401,12 +1401,14 @@ seh_parallel_offset (rtx pat, HOST_WIDE_INT wanted_regnum)
 static void
 seh_pattern_emit (FILE *f, struct seh_frame_state *seh, rtx pat)
 {
-  rtx dest, src;
+#if defined (TARGET_AARCH64_MS_ABI)
+
+   rtx dest, src;
 
    if (GET_CODE (pat) == PARALLEL)
     {
       int i, n = XVECLEN (pat, 0);
-      HOST_WIDE_INT regno, min_regno = 32;
+      HOST_WIDE_INT regno, min_regno = V15_REGNUM;
       int reg_count = 0;
       HOST_WIDE_INT increment = 0;
 
@@ -1452,11 +1454,19 @@ seh_pattern_emit (FILE *f, struct seh_frame_state *seh, rtx pat)
 
       if (reg_count == 2)
       {
-	fprintf (f, "\t.seh_save_%s	x%ld, %ld\n",
-	  increment != 0 ? "regp_x" : "regp",
-	  min_regno,
-	  increment != 0 ? abs (increment) :
-		       seh_parallel_offset (pat, min_regno));
+	HOST_WIDE_INT offset = increment != 0 ? abs (increment) :
+		       seh_parallel_offset (pat, min_regno);
+
+	if (FP_REGNUM_P(regno))
+	  fprintf (f, "\t.seh_save_%s	d%ld, %ld\n",
+	    increment != 0 ? "fregp_x" : "fregp",
+	    min_regno - V0_REGNUM,
+	    offset);
+	else
+	  fprintf (f, "\t.seh_save_%s	x%ld, %ld\n",
+	    increment != 0 ? "regp_x" : "regp",
+	    min_regno,
+	    offset);
       }
     }
   else
@@ -1523,6 +1533,8 @@ seh_pattern_emit (FILE *f, struct seh_frame_state *seh, rtx pat)
 	       && (GET_CODE (pat) == RETURN || GET_CODE (pat) == JUMP_INSN))
 	fputs ("\t.seh_endepilogue\n", f);
     }
+
+#endif
 }
 
 /* This function looks at a single insn and emits any SEH directives

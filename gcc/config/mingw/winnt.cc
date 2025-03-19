@@ -1491,6 +1491,7 @@ seh_pattern_emit (FILE *f, struct seh_frame_state *seh, rtx pat)
       {
 	HOST_WIDE_INT increment = 0;
 	dest = SET_DEST (pat);
+	static HOST_WIDE_INT stack_alloc = 0;
 
 	switch (GET_CODE (dest))
 	  {
@@ -1511,6 +1512,22 @@ seh_pattern_emit (FILE *f, struct seh_frame_state *seh, rtx pat)
 		src = XEXP (src, 0);
 		if (dest == stack_pointer_rtx)
 		  seh_emit_stackalloc (f, seh, increment);
+		break;
+
+	      case MINUS:
+		src = XEXP (src, 0);
+		rtx extend;
+		extend = SET_SRC (pat);
+		extend = XEXP (extend, 1);
+		if (dest == stack_pointer_rtx && src == stack_pointer_rtx
+		    && REGNO(extend) == R12_REGNUM) 
+		  seh_emit_stackalloc (f, seh, stack_alloc);
+   	      break;
+
+	      case CONST_INT:
+		increment = INTVAL (src);
+		if (REGNO(dest) == R12_REGNUM)
+		  stack_alloc = increment;
 		break;
 
 	      case MEM:
@@ -1594,7 +1611,6 @@ aarch64_pe_seh_unwind_emit (FILE *out_file, rtx_insn *insn)
 
 	case REG_CFA_EXPRESSION:
 	case REG_CFA_REGISTER:
-	case REG_CFA_ADJUST_CFA:
 	case REG_CFA_OFFSET:
 	  related_exp_needed = false;
 	  break;

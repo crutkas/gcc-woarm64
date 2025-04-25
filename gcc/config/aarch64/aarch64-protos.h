@@ -1209,6 +1209,8 @@ bool aarch64_optimize_mode_switching (aarch64_mode_entity);
 void aarch64_restore_za (rtx);
 
 /* SEH support */
+extern void aarch64_pe_seh_unwind_emit (FILE *, rtx_insn *);
+extern void aarch64_print_reg (rtx, int, FILE*);
 extern void i386_pe_seh_init (FILE *);
 extern void i386_pe_seh_end_prologue (FILE *);
 // extern void aarch64_pe_seh_function_prologue (FILE *);

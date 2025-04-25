@@ -82,11 +82,6 @@ still needed for compilation.  */
 #undef TARGET_PECOFF
 #define TARGET_PECOFF 1
 
-#include <stdbool.h>
-#ifdef __MINGW32__
-#include <stdio.h>
-#endif
-
 #define TARGET_ASM_NAMED_SECTION  mingw_pe_asm_named_section
 
 /* Select attributes for named sections.  */
@@ -94,9 +89,6 @@ still needed for compilation.  */
 
 #define TARGET_ASM_UNIQUE_SECTION mingw_pe_unique_section
 #define TARGET_ENCODE_SECTION_INFO  mingw_pe_encode_section_info
-
-extern void aarch64_pe_seh_unwind_emit (FILE *, rtx_insn *);
-extern void aarch64_print_reg (rtx, int, FILE*);
 
 #define TARGET_VALID_DLLIMPORT_ATTRIBUTE_P mingw_pe_valid_dllimport_attribute_p
 

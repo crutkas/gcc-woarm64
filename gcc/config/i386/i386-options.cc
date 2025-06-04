@@ -4231,7 +4231,7 @@ static const attribute_spec ix86_gnu_attributes[] =
   { "dllexport", 0, 0, false, false, false, false, handle_dll_attribute,
     NULL },
   { "shared",    0, 0, true,  false, false, false,
-    ix86_handle_shared_attribute, NULL },
+    mingw_handle_shared_attribute, NULL },
 #endif
   { "ms_struct", 0, 0, false, false,  false, false,
     ix86_handle_struct_attribute, NULL },

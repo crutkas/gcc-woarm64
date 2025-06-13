@@ -55,8 +55,8 @@ along with GCC; see the file COPYING3.  If not see
 /* Handle a "shared" attribute;
    arguments as in struct attribute_spec.handler.  */
 tree
-ix86_handle_shared_attribute (tree *node, tree name, tree, int,
-			      bool *no_add_attrs)
+mingw_handle_shared_attribute (tree *node, tree name, tree, int,
+			       bool *no_add_attrs)
 {
   if (TREE_CODE (*node) != VAR_DECL)
     {

@@ -443,7 +443,7 @@ AC_ARG_ENABLE(default_compressed_debug_sections_algorithm,
 # Configure extra directories which are host specific
 
 case "${host}" in
-  *-cygwin*)
+  *-cygwin* | *-msys*)
     configdirs="$configdirs libtermcap" ;;
 esac
 
@@ -839,7 +839,7 @@ esac
 # Disable the go frontend on systems where it is known to not work. Please keep
 # this in sync with contrib/config-list.mk.
 case "${target}" in
-*-*-darwin* | *-*-cygwin* | *-*-mingw* | bpf-* )
+*-*-darwin* | *-*-cygwin* | *-*-msys* | *-*-mingw* | bpf-* )
     unsupported_languages="$unsupported_languages go"
     ;;
 esac
@@ -868,7 +868,7 @@ if test x$enable_libgo = x; then
 	# PR 46986
 	noconfigdirs="$noconfigdirs target-libgo"
 	;;
-    *-*-cygwin* | *-*-mingw*)
+    *-*-cygwin* | *-*-msys* | *-*-mingw*)
 	noconfigdirs="$noconfigdirs target-libgo"
 	;;
     bpf-*-*)
@@ -1170,7 +1170,7 @@ case "${target}" in
   i[[3456789]]86-*-mingw*)
     target_configdirs="$target_configdirs target-winsup"
     ;;
-  *-*-cygwin*)
+  *-*-cygwin* | *-*-msys*)
     target_configdirs="$target_configdirs target-libtermcap target-winsup"
     noconfigdirs="$noconfigdirs target-libgloss"
     # always build newlib if winsup directory is present.
@@ -1326,7 +1326,7 @@ case "${host}" in
   i[[3456789]]86-*-msdosdjgpp*)
     host_makefile_frag="config/mh-djgpp"
     ;;
-  *-cygwin*)
+  *-cygwin* | *-msys*)
     ACX_CHECK_CYGWIN_CAT_WORKS
     host_makefile_frag="config/mh-cygwin"
     ;;
@@ -1937,7 +1937,7 @@ ACX_ELF_TARGET_IFELSE([# ELF platforms build the lto-plugin always.
   build_lto_plugin=yes
 ],[if test x"$default_enable_lto" = x"yes" ; then
     case $target in
-      *-apple-darwin[[912]]* | *-cygwin* | *-mingw* | *djgpp*) ;;
+      *-apple-darwin[[912]]* | *-cygwin* | *-msys* | *-mingw* | *djgpp*) ;;
       # On other non-ELF platforms, LTO has yet to be validated.
       *) enable_lto=no ;;
     esac
@@ -1948,7 +1948,7 @@ ACX_ELF_TARGET_IFELSE([# ELF platforms build the lto-plugin always.
   # warn during gcc/ subconfigure; unless you're bootstrapping with
   # -flto it won't be needed until after installation anyway.
     case $target in
-      *-cygwin* | *-mingw* | *-apple-darwin* | *djgpp*) ;;
+      *-cygwin* | *-msys* | *-mingw* | *-apple-darwin* | *djgpp*) ;;
       *) if test x"$enable_lto" = x"yes"; then
 	AC_MSG_ERROR([LTO support is not enabled for this target.])
         fi
@@ -1958,7 +1958,7 @@ ACX_ELF_TARGET_IFELSE([# ELF platforms build the lto-plugin always.
   # Among non-ELF, only Windows platforms support the lto-plugin so far.
   # Build it unless LTO was explicitly disabled.
   case $target in
-    *-cygwin* | *-mingw*) build_lto_plugin=$enable_lto ;;
+    *-cygwin* | *-msys* | *-mingw*) build_lto_plugin=$enable_lto ;;
     *) ;;
   esac
 ])
@@ -2376,7 +2376,7 @@ if test -d ${srcdir}/gcc; then
         # is position independent code (PIC).
         case $target in
           *mingw*) ;;
-          *cygwin*) ;;
+          *cygwin* | *msys*) ;;
           *)
           case ${add_this_lang}:${language}:${host_shared} in
             yes:jit:no)
@@ -3071,7 +3071,7 @@ rm -f conftest*
 case "${host}" in
   *-*-hpux*) RPATH_ENVVAR=SHLIB_PATH ;;
   *-*-darwin*) RPATH_ENVVAR=DYLD_LIBRARY_PATH ;;
-  *-*-mingw* | *-*-cygwin ) RPATH_ENVVAR=PATH ;;
+  *-*-mingw* | *-*-cygwin* | *-*-msys*) RPATH_ENVVAR=PATH ;;
   *) RPATH_ENVVAR=LD_LIBRARY_PATH ;;
 esac
 
@@ -3650,7 +3650,7 @@ case " $target_configdirs " in
   case " $target_configargs " in
   *" --with-newlib "*)
    case "$target" in
-    *-cygwin*)
+    *-cygwin* | *-msys*)
       FLAGS_FOR_TARGET=$FLAGS_FOR_TARGET' -L$$r/$(TARGET_SUBDIR)/winsup/cygwin -isystem $$s/winsup/cygwin/include'
       ;;
    esac

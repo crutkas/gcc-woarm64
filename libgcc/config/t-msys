@@ -1,0 +1,3 @@
+# MSYS-specific overrides for the Cygwin libgcc configuration.
+SHLIB_LC = -lmsys-2.0 -ladvapi32 -lshell32 -luser32 -lkernel32
+SHLIB_SONAME = msys-gcc_s$(SHLIB_EH_EXTENSION)-$(SHLIB_SOVERSION)$(SHLIB_EXT)

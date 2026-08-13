@@ -280,7 +280,7 @@ AC_DEFUN([GLIBCXX_CHECK_LINKER_FEATURES], [
     # cygwin and mingw uses PE, which has no ELF relro support,
     # multi target ld may confuse configure machinery
     case "$host" in
-    *-*-cygwin*)
+    *-*-cygwin* | *-*-msys*)
      ;;
     *-*-mingw*)
      ;;
@@ -1763,7 +1763,7 @@ AC_DEFUN([GLIBCXX_ENABLE_LIBSTDCXX_TIME], [
   if test x"$enable_libstdcxx_time" = x"auto"; then
 
     case "${target_os}" in
-      cygwin*)
+      cygwin* | msys*)
         ac_has_clock_monotonic=yes
         ac_has_clock_realtime=yes
         ac_has_nanosleep=yes

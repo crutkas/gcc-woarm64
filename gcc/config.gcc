@@ -1272,7 +1272,7 @@ aarch64*-*-gnu*)
         tmake_file="${tmake_file} aarch64/t-aarch64"
         tm_defines="${tm_defines}  TARGET_DEFAULT_ASYNC_UNWIND_TABLES=1"
 	;;
-aarch64-*-cygwin*)
+aarch64-*-cygwin* | aarch64-*-msys*)
 	tm_file="${tm_file} aarch64/aarch64-abi-ms.h"
 	tm_file="${tm_file} aarch64/aarch64-coff.h"
 	tm_file="${tm_file} aarch64/cygming.h"
@@ -1281,6 +1281,11 @@ aarch64-*-cygwin*)
 	tm_file="${tm_file} i386/cygwin-stdint.h"
 	tm_file="${tm_file} mingw/winnt.h"
 	tm_file="${tm_file} mingw/winnt-dll.h"
+	case ${target} in
+	  *-msys*)
+	    tm_file="${tm_file} aarch64/msys.h"
+	    ;;
+	esac
 	xm_file=i386/xm-cygwin.h
 	tmake_file="${tmake_file} aarch64/t-aarch64"
 	tmake_file="${tmake_file} mingw/t-cygming t-slibgcc"

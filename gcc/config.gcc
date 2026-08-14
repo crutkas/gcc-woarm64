@@ -1297,14 +1297,14 @@ aarch64-*-cygwin* | aarch64-*-msys*)
 	cxx_target_objs="${cxx_target_objs} winnt-cxx.o msformat-c.o"
 	d_target_objs="${d_target_objs} cygwin-d.o"
 	target_has_targetdm="yes"
-	aarch64_multilibs="llp64"
+	aarch64_multilibs="lp64"
 	if test x$enable_threads = xyes; then
 		thread_file='posix'
 	fi
 	default_use_cxa_atexit=yes
 	use_gcc_stdint=wrap
 	tm_defines="${tm_defines} TARGET_64BIT=1 TARGET_CYGWIN64=1 TARGET_64BIT_MS_ABI=1 TARGET_AARCH64_MS_ABI=1"
-	TM_MULTILIB_CONFIG="${TM_MULTILIB_CONFIG},llp64"
+	TM_MULTILIB_CONFIG="${TM_MULTILIB_CONFIG},lp64"
 	TM_MULTILIB_CONFIG=`echo $TM_MULTILIB_CONFIG | sed 's/^,//'`
 	;;
 aarch64-*-mingw*)
@@ -1323,7 +1323,7 @@ aarch64-*-mingw*)
 	c_target_objs="${c_target_objs} msformat-c.o"
 	cxx_target_objs="${cxx_target_objs} msformat-c.o"
 	tmake_file="${tmake_file} t-winnt mingw/t-cygming t-slibgcc"
-	aarch64_multilibs="llp64"
+	aarch64_multilibs="lp64"
 	case ${enable_threads} in
 	  "" | yes | win32)
 	    thread_file='win32'
@@ -1335,7 +1335,7 @@ aarch64-*-mingw*)
 	default_use_cxa_atexit=yes
 	user_headers_inc_next_post="${user_headers_inc_next_post} float.h"
 	tm_defines="${tm_defines} TARGET_AARCH64_MS_ABI=1"
-	TM_MULTILIB_CONFIG="${TM_MULTILIB_CONFIG},llp64"
+	TM_MULTILIB_CONFIG="${TM_MULTILIB_CONFIG},lp64"
 	TM_MULTILIB_CONFIG=`echo $TM_MULTILIB_CONFIG | sed 's/^,//'`
 	;;
 aarch64*-wrs-vxworks*)

@@ -270,9 +270,8 @@ fastfloat_really_inline uint64_t _umul128(uint64_t ab, uint64_t cd,
 fastfloat_really_inline value128 full_multiplication(uint64_t a,
                                                      uint64_t b) {
   value128 answer;
-#if defined(_M_ARM64) && !defined(__MINGW32__)
-  // ARM64 has native support for 64-bit multiplications, no need to emulate
-  // But MinGW on ARM64 doesn't have native support for 64-bit multiplications
+#if defined(FASTFLOAT_VISUAL_STUDIO) && defined(_M_ARM64)
+  // MSVC on ARM64 provides a native high-half 64-bit multiplication.
   answer.high = __umulh(a, b);
   answer.low = a * b;
 #elif defined(FASTFLOAT_32BIT) || (defined(_WIN64) && !defined(__clang__) && !defined(_M_ARM64))
@@ -3041,4 +3040,3 @@ from_chars_result from_chars_advanced(const char *first, const char *last,
 } // namespace fast_float
 
 #endif
-

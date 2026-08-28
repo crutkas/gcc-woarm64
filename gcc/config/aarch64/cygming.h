@@ -141,6 +141,8 @@ still needed for compilation.  */
   do									\
     {									\
       builtin_define ("__SEH__");					\
+      /* This selects 64-bit Windows declarations, not the LLP64 model.  */	\
+      builtin_define ("_WIN64");					\
       builtin_define_with_int_value ("_INTEGRAL_MAX_BITS",		\
 				TYPE_PRECISION (intmax_type_node));	\
       builtin_define ("__stdcall=__attribute__((__stdcall__))");	\

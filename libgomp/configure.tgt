@@ -145,7 +145,7 @@ case "${target}" in
 	esac
 	;;
 
-  *-*-cygwin*)
+  *-*-cygwin* | *-*-msys*)
 	config_path="cygwin posix"
 	;;
 

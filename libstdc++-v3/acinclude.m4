@@ -277,10 +277,10 @@ AC_DEFUN([GLIBCXX_CHECK_LINKER_FEATURES], [
   # Note this is only for shared objects.
   ac_ld_relro=no
   if test x"$with_gnu_ld" = x"yes"; then
-    # cygwin and mingw uses PE, which has no ELF relro support,
+    # Cygwin, MSYS, and MinGW use PE, which has no ELF relro support,
     # multi target ld may confuse configure machinery
     case "$host" in
-    *-*-cygwin*)
+    *-*-cygwin* | *-*-msys*)
      ;;
     *-*-mingw*)
      ;;
@@ -573,7 +573,7 @@ AC_DEFUN([GLIBCXX_CONFIGURE_TESTSUITE], [
   if $GLIBCXX_IS_NATIVE && test $is_hosted = yes &&
      test $enable_symvers != no; then
     case "$host" in
-      *-*-cygwin*)
+      *-*-cygwin* | *-*-msys*)
 	enable_abi_check=no ;;
       *)
 	enable_abi_check=yes ;;
@@ -1763,7 +1763,7 @@ AC_DEFUN([GLIBCXX_ENABLE_LIBSTDCXX_TIME], [
   if test x"$enable_libstdcxx_time" = x"auto"; then
 
     case "${target_os}" in
-      cygwin*)
+      cygwin* | msys*)
         ac_has_clock_monotonic=yes
         ac_has_clock_realtime=yes
         ac_has_nanosleep=yes
@@ -3146,7 +3146,7 @@ AC_DEFUN([GLIBCXX_ENABLE_VTABLE_VERIFY], [
   vtv_cygmin=no
   if test $enable_vtable_verify = yes; then
     case ${target_os} in
-      cygwin*|mingw32*)
+      cygwin*|msys*|mingw32*)
         VTV_CXXFLAGS="-fvtable-verify=std -Wl,-lvtv,-u_vtable_map_vars_start,-u_vtable_map_vars_end"
         VTV_CXXLINKFLAGS="-L${toplevel_builddir}/libvtv/.libs -Wl,--rpath -Wl,${toplevel_builddir}/libvtv/.libs"
         vtv_cygmin=yes

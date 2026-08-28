@@ -73,6 +73,16 @@ LIBTOOL_PLUGIN_CONFIGURES = (
 
 PLUGIN_CONFIGURES = GCC_PLUGIN_CONFIGURES + LIBTOOL_PLUGIN_CONFIGURES
 
+# The call sites that turn a discovered plugin option into the AR and
+# RANLIB makefile variables.  Both the hand written source and the shipped
+# script are listed, because the script is what actually runs.
+PLUGIN_WIRING_SOURCES = (
+    Path("configure.ac"),
+    Path("configure"),
+    Path("libiberty/configure.ac"),
+    Path("libiberty/configure"),
+)
+
 PLUGIN_CANDIDATES = {
     "cygwin": ("cyglto_plugin.dll", "cyglto_plugin-0.dll"),
     "msys": ("msys-lto_plugin.dll", "msys-lto_plugin-0.dll"),
@@ -251,6 +261,82 @@ def normalized_libtool_block(block):
     )
 
 
+def plugin_make_wiring_block(path, source=None):
+    """The configure body that feeds PLUGIN_OPTION through the helper.
+
+    Pinning func_plugin_make_quote and the makefile recipe only protects a
+    build if the call site actually reaches the helper, so the wiring is
+    extracted here and executed rather than assumed.
+    """
+    text = read_source(path) if source is None else source
+    marker = "AR_PLUGIN_OPTION=\nRANLIB_PLUGIN_OPTION=\n"
+    starts = [match.start() for match in re.finditer(re.escape(marker), text)]
+    if len(starts) != 1:
+        raise AssertionError(
+            f"expected one plugin make wiring block in {path}, "
+            f"got {len(starts)}"
+        )
+    # The block ends at the first column zero `fi', which closes the
+    # `if test -n "$PLUGIN_OPTION"' that opens it; every inner `fi' is
+    # indented.  Anchoring on structure rather than on one of the
+    # assignments keeps a reverted assignment reportable as a failed
+    # assertion instead of an extraction error.
+    end = text.index("\nfi\n", starts[0]) + len("\nfi\n")
+    return text[starts[0]:end].rstrip()
+
+
+def normalized_wiring_block(block):
+    """Reduce a wiring block to the form shared by all four call sites.
+
+    AC_SUBST expands to nothing in the shipped script and AC_MSG_WARN
+    expands to a two line diagnostic, so both are folded away; everything
+    that decides which value reaches make is left untouched.
+    """
+    lines = []
+    for line in block.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("AC_SUBST("):
+            continue
+        if (
+            stripped.startswith("AC_MSG_WARN(")
+            or "WARNING: plugin path is not representable" in stripped
+        ):
+            if lines[-1:] != ["<warning>"]:
+                lines.append("<warning>")
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def wiring_runnable(block):
+    """Turn an extracted wiring block into text a shell can run.
+
+    AC_SUBST is an autoconf directive with no run time effect -- the
+    shipped configure carries a blank line where it sits -- so dropping it
+    keeps the executed text faithful to what a build really runs.
+    """
+    return shell_ready(
+        "\n".join(
+            line
+            for line in block.splitlines()
+            if not line.strip().startswith("AC_SUBST(")
+        )
+    )
+
+
+def expected_make_quoted(value):
+    """An independent model of the accept and refuse contract.
+
+    The shell helper is the implementation under test, so the expected
+    text is derived here instead of by running it; otherwise the wiring
+    cases would only prove the helper agrees with itself.
+    """
+    if any(character in value for character in ("\n", "$", "`", '"')):
+        return ""
+    quoted = "'" + value.replace("'", "'\\''") + "'"
+    return quoted.replace("$", "$$").replace("#", "\\#")
+
+
 M4_RESIDUE = re.compile(r"\b(?:AC_[A-Z_]+|AS_[A-Z_]+|_LT_[A-Z_]+|m4_\w+)\s*\(|^dnl\b",
                         re.MULTILINE)
 
@@ -258,7 +344,7 @@ M4_RESIDUE = re.compile(r"\b(?:AC_[A-Z_]+|AS_[A-Z_]+|_LT_[A-Z_]+|m4_\w+)\s*\(|^d
 # records its name here so the documented count can be reconciled with the
 # count the suite actually runs.
 MUTATION_LEDGER = []
-EXECUTED_MUTATION_INSTANCES = 42
+EXECUTED_MUTATION_INSTANCES = 58
 
 
 def shell_ready(block, error_status=97):
@@ -932,6 +1018,166 @@ fi
         values["returncode"] = result.returncode
         values["stderr"] = result.stderr
         return values
+
+    def run_plugin_make_wiring(
+        self,
+        block,
+        plugin_option,
+        ar_advertises=True,
+        ranlib_advertises=True,
+    ):
+        """Execute the real configure wiring, file in and file out.
+
+        The plugin path never crosses a command line and the two results
+        come back NUL separated, so no layer between the test and the
+        shell can alter either end.  Any file the run did not expect is
+        returned as well, so an injected command is observed rather than
+        inferred.
+        """
+        script = wiring_runnable(block)
+        assert_no_m4_residue(self, script)
+        expected_files = {
+            "in.txt",
+            "out.log",
+            "config.log",
+            "fake_ar",
+            "fake_ranlib",
+            "routing-probe.sh",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            (work / "in.txt").write_bytes(plugin_option.encode())
+            for name, advertises in (
+                ("fake_ar", ar_advertises),
+                ("fake_ranlib", ranlib_advertises),
+            ):
+                usage = (
+                    "usage: fake tool [--plugin PLUGIN]"
+                    if advertises
+                    else "usage: fake tool"
+                )
+                stub = work / name
+                stub.write_bytes(
+                    ("#!/bin/sh\nprintf '%s\\n' '" + usage + "'\n"
+                     "exit 0\n").encode()
+                )
+                stub.chmod(0o755)
+            full = (
+                plugin_helpers_block(Path("config/gcc-plugin.m4"))
+                + "\nas_echo='printf %s\\n'\n"
+                "as_me=configure\n"
+                "exec 5>config.log\n"
+                "PLUGIN_OPTION=$(cat in.txt; printf X)\n"
+                "PLUGIN_OPTION=${PLUGIN_OPTION%X}\n"
+                "AR=./fake_ar\n"
+                "RANLIB=./fake_ranlib\n"
+                + script
+                + "\nprintf '%s\\000%s\\000' \"$AR_PLUGIN_OPTION\""
+                ' "$RANLIB_PLUGIN_OPTION" > out.log\n'
+            )
+            result = self.run_shell_script(full, work, os.environ.copy())
+            self.assertEqual(
+                result.returncode, 0, f"wiring failed: {result.stderr}"
+            )
+            values = self.read_nul_arguments(work / "out.log")
+            unexpected = sorted(
+                entry.name
+                for entry in work.iterdir()
+                if entry.name not in expected_files
+            )
+        self.assertEqual(len(values), 2)
+        return values, unexpected
+
+    def test_plugin_make_wiring_runs_the_quoting_helper(self):
+        """A pinned helper is worthless if the call site bypasses it.
+
+        The suite already pins func_plugin_make_quote and the makefile
+        recipe, but a wiring line that assigned $PLUGIN_OPTION straight to
+        AR_PLUGIN_OPTION would satisfy both while shipping the raw value.
+        These cases execute the wiring out of all four call sites, so the
+        line that reaches the helper is itself under test.
+        """
+        blocks = {
+            path: plugin_make_wiring_block(path)
+            for path in PLUGIN_WIRING_SOURCES
+        }
+        reference = normalized_wiring_block(blocks[Path("configure.ac")])
+
+        benign = "--plugin=/plugins/liblto_plugin.dll"
+        hostile = (
+            "--plugin=/plug ins/meta;touch INJECTED;"
+            "#/glob*/lib'lto.dll"
+        )
+        refused = "--plugin=/plugins/$(touch INJECTED)/liblto_plugin.dll"
+        self.assertNotEqual(expected_make_quoted(hostile), "")
+        self.assertEqual(expected_make_quoted(refused), "")
+
+        # The empty option is the default configuration rather than an
+        # edge case: most builds discover no plugin at all, so it is
+        # listed first and asserted byte exactly.
+        cases = (
+            ("empty", "", True, True, "", ""),
+            (
+                "benign",
+                benign,
+                True,
+                True,
+                expected_make_quoted(benign),
+                expected_make_quoted(benign),
+            ),
+            (
+                "hostile",
+                hostile,
+                True,
+                True,
+                expected_make_quoted(hostile),
+                expected_make_quoted(hostile),
+            ),
+            ("refused", refused, True, True, "", ""),
+            (
+                "ranlib-has-no-plugin-support",
+                benign,
+                True,
+                False,
+                expected_make_quoted(benign),
+                "",
+            ),
+            (
+                "ar-has-no-plugin-support",
+                benign,
+                False,
+                True,
+                "",
+                expected_make_quoted(benign),
+            ),
+            ("neither-tool-supports-plugins", benign, False, False, "", ""),
+        )
+
+        for path, block in blocks.items():
+            with self.subTest(path=path):
+                for name, option, ar, ranlib, want_ar, want_ranlib in cases:
+                    with self.subTest(case=name):
+                        values, unexpected = self.run_plugin_make_wiring(
+                            block, option, ar, ranlib
+                        )
+                        self.assertEqual(values, (want_ar, want_ranlib))
+                        self.assertEqual(unexpected, [])
+                        if option and want_ar:
+                            self.assertNotEqual(values[0], option)
+
+        # The text is pinned only after the behaviour has been shown on
+        # every call site, so a wiring line that stopped calling the
+        # helper is reported as a wrong value first and as a text
+        # mismatch second, rather than the other way around.
+        for required in (
+            "plugin_make_arg=$PLUGIN_OPTION; func_plugin_make_quote",
+            "AR_PLUGIN_OPTION=$plugin_make_quoted",
+            "RANLIB_PLUGIN_OPTION=$plugin_make_quoted",
+        ):
+            self.assertIn(required, reference)
+        for path, block in blocks.items():
+            with self.subTest(pinned=path):
+                self.assertEqual(normalized_wiring_block(block), reference)
 
     def fixincludes_kind(self, target):
         with tempfile.TemporaryDirectory() as directory:
@@ -2249,6 +2495,45 @@ fi
         )
         self.assertEqual(jit_multilib_arguments(defaults), ("-m64",))
 
+        wiring_hostile = (
+            "--plugin=/plug ins/meta;touch INJECTED;"
+            "#/glob*/lib'lto.dll"
+        )
+        wiring_expected = expected_make_quoted(wiring_hostile)
+        for wiring_path in PLUGIN_WIRING_SOURCES:
+            wiring_tag = wiring_path.as_posix()
+            wiring = plugin_make_wiring_block(wiring_path)
+            for name, old, new in (
+                (
+                    f"{wiring_tag}:wiring-bypasses-make-quote",
+                    "  plugin_make_arg=$PLUGIN_OPTION; "
+                    "func_plugin_make_quote\n",
+                    "  plugin_make_quoted=$PLUGIN_OPTION\n",
+                ),
+                (
+                    f"{wiring_tag}:wiring-ar-uses-raw-option",
+                    "      AR_PLUGIN_OPTION=$plugin_make_quoted\n",
+                    "      AR_PLUGIN_OPTION=$PLUGIN_OPTION\n",
+                ),
+                (
+                    f"{wiring_tag}:wiring-ranlib-uses-raw-option",
+                    "      RANLIB_PLUGIN_OPTION=$plugin_make_quoted\n",
+                    "      RANLIB_PLUGIN_OPTION=$PLUGIN_OPTION\n",
+                ),
+                (
+                    f"{wiring_tag}:wiring-refusal-gate",
+                    '  if test -z "$plugin_make_quoted"; then\n',
+                    '  if test -n "$plugin_make_quoted"; then\n',
+                ),
+            ):
+                wiring_mutant = self.mutate(name, wiring, old, new)
+                values, unused_files = self.run_plugin_make_wiring(
+                    wiring_mutant, wiring_hostile
+                )
+                self.assertNotEqual(
+                    values, (wiring_expected, wiring_expected), name
+                )
+
         self.assertEqual(
             len(MUTATION_LEDGER),
             len(set(MUTATION_LEDGER)),
@@ -2286,10 +2571,12 @@ fi
 
         gcc/config/aarch64/aarch64-abi-ms.h marks x18 fixed, never call
         clobbered, and moves the static chain to r17 precisely because of
-        that.  libffi's ffi_call_SYSV installs the Go static chain into
-        x18 on every call and never restores it, so the predicate that
-        disables FFI_GO_CLOSURES has to cover every Windows AArch64
-        family, not just the ones that predefine _WIN32.
+        that.  libffi's ffi_call_SYSV writes the Go static chain into x18
+        under an FFI_GO_CLOSURES guard and never restores it, and every
+        ordinary ffi_call reaches that instruction with a NULL chain once
+        the guard is satisfied, so the predicate that disables
+        FFI_GO_CLOSURES has to cover every Windows AArch64 family, not
+        just the ones that predefine _WIN32.
         """
         header = read_source(Path("libffi/src/aarch64/ffitarget.h"))
         self.assertIn(
@@ -2330,6 +2617,16 @@ fi
         )
         chain = assembly.index("mov\tx18, x5")
         self.assertLess(guard, chain)
+        # The store is guarded already.  What the assertion above prevents
+        # is the predicate being satisfied, so pin the guarded shape too:
+        # a future edit that lifted the store out of the #ifdef would make
+        # the surrounding comment wrong and the #error insufficient.
+        self.assertIn(
+            "#ifdef FFI_GO_CLOSURES\n"
+            "\tmov\tx18, x5\t\t\t/* install static chain */\n"
+            "#endif\n",
+            assembly,
+        )
 
     @unittest.skipUnless(REAL_SH, "requires a POSIX shell")
     def test_libffi_predicate_evaluates_per_windows_family(self):

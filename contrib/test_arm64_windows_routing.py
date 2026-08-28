@@ -178,6 +178,18 @@ def plugin_discovery_block(path, source=None):
     return matches[0]
 
 
+def gcc_plugin_archive_probe_block(path, source=None):
+    text = read_source(path) if source is None else source
+    discovery = plugin_discovery_block(path, text)
+    search_from = text.index(discovery) + len(discovery)
+    start = text.index('if test "${AR}" = "" ; then', search_from)
+    end = text.index(
+        'if test -n "$plugin_option"; then\n  $1="$plugin_option"',
+        start,
+    )
+    return text[start:end].rstrip()
+
+
 def libtool_archive_probe_block(path, source=None):
     text = read_source(path) if source is None else source
     discovery = plugin_discovery_block(path, text)
@@ -194,25 +206,30 @@ def libtool_ranlib_block(path, source=None):
     search_from = text.index(discovery) + len(discovery)
     match = re.search(
         r'^if test -n "\$plugin_option" && '
-        r'test "\$RANLIB" != ":"; then\n'
-        r'  if \$RANLIB --help 2>&1 \| grep -q "\\--plugin"; then\n'
-        r'    RANLIB="\$RANLIB \$plugin_option"\n'
-        r'  fi\n'
-        r'fi$',
+        r'test "\$RANLIB" != ":"; then\n.*?^fi$',
         text[search_from:],
-        re.MULTILINE,
+        re.MULTILINE | re.DOTALL,
     )
     if match is None:
         raise AssertionError(f"libtool RANLIB block not found in {path}")
     return match.group(0)
 
 
-def normalized_libtool_probe(block):
+def libtool_archive_templates_block(path, source=None):
+    text = read_source(path) if source is None else source
+    start = text.index(
+        "# Determine commands to create old-style static archives."
+    )
+    end = text.index("\ncase $host_os in", start)
+    return text[start:end].rstrip()
+
+
+def normalized_libtool_block(block):
     return "\n".join(
         line
         for line in block.splitlines()
-        if "WARNING: Failed: $AR $plugin_option rc" not in line
-        and "AC_MSG_WARN([Failed: $AR $plugin_option rc])" not in line
+        if "Failed: $AR" not in line
+        and "Failed: $RANLIB" not in line
     )
 
 
@@ -486,13 +503,33 @@ class TestArm64WindowsRouting(unittest.TestCase):
         )
         return result.stdout.strip()
 
-    def run_plugin_discovery(
-        self, block, host, available, target=None
+    def run_shell_script(self, script, cwd, environment):
+        script_path = Path(cwd) / "routing-probe.sh"
+        script_path.write_text(script, encoding="utf-8", newline="\n")
+        return subprocess.run(
+            [self.shell, script_path.name],
+            cwd=cwd,
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
+
+    def read_nul_arguments(self, path):
+        if not path.exists():
+            return ()
+        parts = path.read_bytes().split(b"\0")
+        self.assertEqual(parts.pop(), b"")
+        return tuple(part.decode("utf-8") for part in parts)
+
+    def plugin_discovery_result(
+        self, block, host, available, target=None, plugin_dir="/plugins"
     ):
         environment = os.environ.copy()
         environment.update(
             {
                 "AVAILABLE": " ".join(available),
+                "INJECTION_FILE": "injected",
+                "PLUGIN_DIR": plugin_dir,
                 "host": host,
                 "target": target or host,
             }
@@ -506,7 +543,7 @@ fake_cc ()
     name=$argument
   done
   case " $AVAILABLE " in
-    *" $name "*) printf "/plugins/%s\n" "$name" ;;
+    *" $name "*) printf "%s/%s\n" "$PLUGIN_DIR" "$name" ;;
     *) printf "%s\n" "$name" ;;
   esac
 }
@@ -515,39 +552,40 @@ CFLAGS=
 ''' + block + r'''
 printf "%s\n" "$plugin_option"
 '''
-        result = subprocess.run(
-            [self.shell, "-c", script],
-            cwd=ROOT,
-            env=environment,
-            capture_output=True,
-            text=True,
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.run_shell_script(script, directory, environment)
+        return result
+
+    def run_plugin_discovery(
+        self, block, host, available, target=None, plugin_dir="/plugins"
+    ):
+        result = self.plugin_discovery_result(
+            block, host, available, target, plugin_dir
         )
         self.assertEqual(
             result.returncode,
             0,
             f"plugin discovery failed: {result.stderr}",
         )
+        self.assertEqual(result.stderr, "")
         return result.stdout.strip()
 
-    def run_libtool_archive_probe(
-        self,
-        discovery,
-        archive_probe,
-        ranlib_probe,
-        host,
-        available,
-        ar_status,
-        ar_advertises=True,
+    def run_gcc_plugin_archive_probe(
+        self, discovery, archive_probe, host, available, plugin_dir
     ):
-        warning = "      AC_MSG_WARN([Failed: $AR $plugin_option rc])"
-        self.assertIn(warning, archive_probe)
-        archive_probe = archive_probe.replace(warning, "      :")
+        archive_probe = archive_probe.replace(
+            "  AC_MSG_ERROR([Required archive tool 'ar' not found on PATH.])",
+            "  return 97",
+        ).replace(
+            '    AC_MSG_WARN([Failed: $AR "$plugin_option" rc])',
+            "    :",
+        )
         environment = os.environ.copy()
         environment.update(
             {
-                "AR_ADVERTISES": "yes" if ar_advertises else "no",
-                "AR_STATUS": str(ar_status),
                 "AVAILABLE": " ".join(available),
+                "INJECTION_FILE": "injected",
+                "PLUGIN_DIR": plugin_dir,
                 "host": host,
                 "target": host,
             }
@@ -561,51 +599,187 @@ fake_cc ()
     name=$argument
   done
   case " $AVAILABLE " in
-    *" $name "*) printf "/plugins/%s\n" "$name" ;;
+     *" $name "*) printf "%s/%s\n" "$PLUGIN_DIR" "$name" ;;
     *) printf "%s\n" "$name" ;;
   esac
 }
 fake_ar ()
 {
-  if test "$1" = "--help"; then
-    test "$AR_ADVERTISES" = yes && printf "%s\n" "--plugin"
-    return 0
-  fi
+  printf '%s\000' "$@" >> ar.log
+  return 0
+}
+run_controller ()
+{
+  CC=fake_cc
+  CFLAGS=
+  AR='fake_ar --configured-ar-argument'
+''' + discovery + "\n" + archive_probe + r'''
+  printf "plugin_option=%s\n" "$plugin_option"
+}
+run_controller
+printf "controller_status=%s\n" "$?"
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            result = self.run_shell_script(script, temp, environment)
+            arguments = self.read_nul_arguments(temp / "ar.log")
+        values = dict(
+            line.split("=", 1) for line in result.stdout.splitlines()
+        )
+        return result, values, arguments
+
+    def run_libtool_archive_probe(
+        self,
+        discovery,
+        archive_probe,
+        ranlib_probe,
+        archive_templates,
+        host,
+        available,
+        ar_status,
+        ar_advertises=True,
+        ranlib_status=0,
+        ranlib_advertises=True,
+        plugin_dir="/plugins",
+    ):
+        archive_probe = archive_probe.replace(
+            '      AC_MSG_WARN([Failed: $AR "$plugin_option" rc])',
+            "      :",
+        )
+        ranlib_probe = ranlib_probe.replace(
+            '      AC_MSG_WARN([Failed: $RANLIB "$plugin_option" conftest.a])',
+            "      :",
+        )
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "AR_ADVERTISES": "yes" if ar_advertises else "no",
+                "AR_STATUS": str(ar_status),
+                "AVAILABLE": " ".join(available),
+                "INJECTION_FILE": "injected",
+                "PLUGIN_DIR": plugin_dir,
+                "RANLIB_ADVERTISES": (
+                    "yes" if ranlib_advertises else "no"
+                ),
+                "RANLIB_STATUS": str(ranlib_status),
+                "host": host,
+                "target": host,
+            }
+        )
+        script = r'''
+fake_cc ()
+{
+  name=
+  for argument
+  do
+    name=$argument
+  done
+  case " $AVAILABLE " in
+   *" $name "*) printf "%s/%s\n" "$PLUGIN_DIR" "$name" ;;
+    *) printf "%s\n" "$name" ;;
+  esac
+}
+fake_ar ()
+{
+  for argument
+  do
+    if test "$argument" = "--help"; then
+      test "$AR_ADVERTISES" = yes && printf "%s\n" "--plugin"
+      return 0
+    fi
+  done
+  printf '%s\000' "$@" >> "$AR_LOG"
   return "$AR_STATUS"
 }
 fake_ranlib ()
 {
-  if test "$1" = "--help"; then
-    printf "%s\n" "--plugin"
-  fi
-  return 0
+  for argument
+  do
+    if test "$argument" = "--help"; then
+      test "$RANLIB_ADVERTISES" = yes && printf "%s\n" "--plugin"
+      return 0
+    fi
+  done
+  printf '%s\000' "$@" >> "$RANLIB_LOG"
+  return "$RANLIB_STATUS"
 }
 CC=fake_cc
 CFLAGS=
-AR=fake_ar
-RANLIB=fake_ranlib
-''' + discovery + "\n" + archive_probe + "\n" + ranlib_probe + r'''
+ECHO=echo
+SED=sed
+sed_quote_subst='s/\(["`$\\]\)/\\\1/g'
+AR='fake_ar --configured-ar-argument'
+RANLIB='fake_ranlib --configured-ranlib-argument'
+AR_LOG=ar-probe.log
+RANLIB_LOG=ranlib-probe.log
+host_os=msys
+AR_FLAGS=rc
+oldlib=conftest.a
+oldobjs=' conftest.o'
+''' + discovery + r'''
+ar_plugin_option=
+ranlib_plugin_option=
+''' + archive_probe + "\n" + ranlib_probe + "\n" + archive_templates + r'''
+ar_command_status=not-run
+ranlib_command_status=not-run
+if test -n "$ar_plugin_option"; then
+  AR_LOG=ar-command.log
+  ar_command=${old_archive_cmds%%~*}
+  eval "$ar_command"
+  ar_command_status=$?
+fi
+if test -n "$ranlib_plugin_option"; then
+  RANLIB_LOG=ranlib-command.log
+  ranlib_command=${old_archive_cmds#*~}
+  eval "$ranlib_command"
+  ranlib_command_status=$?
+fi
 printf "plugin_option=%s\n" "$plugin_option"
 printf "AR=%s\n" "$AR"
 printf "RANLIB=%s\n" "$RANLIB"
+printf "ar_plugin_option=%s\n" "$ar_plugin_option"
+printf "ranlib_plugin_option=%s\n" "$ranlib_plugin_option"
+printf "old_archive_cmds=%s\n" "$old_archive_cmds"
+printf "ar_command_status=%s\n" "$ar_command_status"
+printf "ranlib_command_status=%s\n" "$ranlib_command_status"
+if test -e injected; then
+  printf "injected=yes\n"
+else
+  printf "injected=no\n"
+fi
 '''
         with tempfile.TemporaryDirectory() as directory:
-            result = subprocess.run(
-                [self.shell, "-c", script],
-                cwd=directory,
-                env=environment,
-                capture_output=True,
-                text=True,
-            )
-        self.assertEqual(
-            result.returncode,
-            0,
-            f"libtool archive probe failed: {result.stderr}",
-        )
-        return dict(
+            temp = Path(directory)
+            glob_dir = temp / "dir" / "glob-expanded"
+            glob_dir.mkdir(parents=True)
+            for name in ALL_PLUGIN_NAMES:
+                (glob_dir / name).touch()
+            result = self.run_shell_script(script, temp, environment)
+            arguments = {
+                "ar_probe": self.read_nul_arguments(
+                    temp / "ar-probe.log"
+                ),
+                "ranlib_probe": self.read_nul_arguments(
+                    temp / "ranlib-probe.log"
+                ),
+                "ar_command": self.read_nul_arguments(
+                    temp / "ar-command.log"
+                ),
+                "ranlib_command": self.read_nul_arguments(
+                    temp / "ranlib-command.log"
+                ),
+            }
+            injected = (temp / "injected").exists()
+        values = dict(
             line.split("=", 1)
             for line in result.stdout.splitlines()
+            if "=" in line
         )
+        values.update(arguments)
+        values["injected_file"] = injected
+        values["returncode"] = result.returncode
+        values["stderr"] = result.stderr
+        return values
 
     def fixincludes_kind(self, target):
         with tempfile.TemporaryDirectory() as directory:
@@ -818,6 +992,9 @@ printf "RANLIB=%s\n" "$RANLIB"
         )
         libtool_controller = plugin_discovery_block(Path("libtool.m4"))
         self.assertEqual(gcc_controller, libtool_controller)
+        gcc_archive_probe = gcc_plugin_archive_probe_block(
+            Path("config/gcc-plugin.m4")
+        )
         gcc_plugin_callers = {
             path.relative_to(ROOT)
             for path in ROOT.rglob("configure.ac")
@@ -845,7 +1022,7 @@ printf "RANLIB=%s\n" "$RANLIB"
         actual_gcc_consumers = {
             path
             for path in PLUGIN_CONFIGURES
-            if 'AR="$AR $plugin_option"' not in read_source(path)
+            if "ar_plugin_option=" not in read_source(path)
         }
         self.assertEqual(
             actual_gcc_consumers, set(GCC_PLUGIN_CONFIGURES)
@@ -861,16 +1038,39 @@ printf "RANLIB=%s\n" "$RANLIB"
             Path("libtool.m4")
         )
         controller_ranlib = libtool_ranlib_block(Path("libtool.m4"))
+        controller_templates = libtool_archive_templates_block(
+            Path("libtool.m4")
+        )
         for path in LIBTOOL_PLUGIN_CONFIGURES:
             with self.subTest(libtool_consumer=path):
                 self.assertEqual(
-                    normalized_libtool_probe(
+                    normalized_libtool_block(
                         libtool_archive_probe_block(path)
                     ),
-                    normalized_libtool_probe(controller_probe),
+                    normalized_libtool_block(controller_probe),
                 )
                 self.assertEqual(
-                    libtool_ranlib_block(path), controller_ranlib
+                    normalized_libtool_block(libtool_ranlib_block(path)),
+                    normalized_libtool_block(controller_ranlib),
+                )
+                self.assertEqual(
+                    libtool_archive_templates_block(path),
+                    controller_templates,
+                )
+                text = read_source(path)
+                self.assertNotIn("$AR $plugin_option rc", text)
+                self.assertNotIn("$RANLIB $plugin_option conftest.a", text)
+
+        for path in GCC_PLUGIN_CONFIGURES:
+            text = read_source(path)
+            with self.subTest(gcc_plugin_consumer=path):
+                self.assertIn(
+                    '${AR} "$plugin_option" rc conftest.a conftest.c',
+                    text,
+                )
+                self.assertNotIn(
+                    "${AR} $plugin_option rc conftest.a conftest.c",
+                    text,
                 )
 
         matrix = (
@@ -896,14 +1096,14 @@ printf "RANLIB=%s\n" "$RANLIB"
                         block, host, ALL_PLUGIN_NAMES
                     )
                     self.assertEqual(
-                        selected, f"--plugin /plugins/{candidates[0]}"
+                        selected, f"--plugin=/plugins/{candidates[0]}"
                     )
                     for candidate in candidates:
                         selected = self.run_plugin_discovery(
                             block, host, (candidate,)
                         )
                         self.assertEqual(
-                            selected, f"--plugin /plugins/{candidate}"
+                            selected, f"--plugin=/plugins/{candidate}"
                         )
 
         msys_host = self.canonical_target("arm64-pc-msys")
@@ -935,47 +1135,147 @@ printf "RANLIB=%s\n" "$RANLIB"
                     "",
                 )
 
+        selected_name = PLUGIN_CANDIDATES["msys"][0]
+        hostile_directories = (
+            "/plugins/space dir/glob[*]?$dollar&meta",
+            "space dir/glob*",
+            '/plugins/meta;$(touch "$INJECTION_FILE")&name',
+            "/plugins/quote'part",
+        )
+        for plugin_dir in hostile_directories:
+            expected_option = f"--plugin={plugin_dir}/{selected_name}"
+            with self.subTest(controller="gcc", plugin_dir=plugin_dir):
+                result, values, arguments = (
+                    self.run_gcc_plugin_archive_probe(
+                        gcc_controller,
+                        gcc_archive_probe,
+                        msys_host,
+                        (selected_name,),
+                        plugin_dir,
+                    )
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stderr, "")
+                self.assertEqual(values["controller_status"], "0")
+                self.assertEqual(
+                    values["plugin_option"], expected_option
+                )
+                self.assertEqual(
+                    arguments,
+                    (
+                        "--configured-ar-argument",
+                        expected_option,
+                        "rc",
+                        "conftest.a",
+                        "conftest.c",
+                    ),
+                )
+
         rejected = self.run_libtool_archive_probe(
             libtool_controller,
             controller_probe,
             controller_ranlib,
+            controller_templates,
             msys_host,
-            (PLUGIN_CANDIDATES["msys"][0],),
+            (selected_name,),
             ar_status=1,
         )
         self.assertEqual(rejected["plugin_option"], "")
-        self.assertEqual(rejected["AR"], "fake_ar")
-        self.assertEqual(rejected["RANLIB"], "fake_ranlib")
+        self.assertEqual(
+            rejected["AR"], "fake_ar --configured-ar-argument"
+        )
+        self.assertEqual(
+            rejected["RANLIB"], "fake_ranlib --configured-ranlib-argument"
+        )
+        self.assertEqual(rejected["ranlib_probe"], ())
+        self.assertEqual(rejected["ranlib_command"], ())
 
         unsupported = self.run_libtool_archive_probe(
             libtool_controller,
             controller_probe,
             controller_ranlib,
+            controller_templates,
             msys_host,
-            (PLUGIN_CANDIDATES["msys"][0],),
+            (selected_name,),
             ar_status=0,
             ar_advertises=False,
         )
         self.assertEqual(unsupported["plugin_option"], "")
-        self.assertEqual(unsupported["AR"], "fake_ar")
-        self.assertEqual(unsupported["RANLIB"], "fake_ranlib")
+        self.assertEqual(unsupported["ar_probe"], ())
+        self.assertEqual(unsupported["ranlib_probe"], ())
 
-        accepted = self.run_libtool_archive_probe(
+        ranlib_rejected = self.run_libtool_archive_probe(
             libtool_controller,
             controller_probe,
             controller_ranlib,
+            controller_templates,
             msys_host,
-            (PLUGIN_CANDIDATES["msys"][0],),
+            (selected_name,),
             ar_status=0,
+            ranlib_status=1,
         )
-        option = "--plugin /plugins/msys-lto_plugin.dll"
-        self.assertEqual(accepted["plugin_option"], option)
-        self.assertEqual(accepted["AR"], f"fake_ar {option}")
-        self.assertEqual(accepted["RANLIB"], f"fake_ranlib {option}")
+        self.assertNotEqual(ranlib_rejected["ar_plugin_option"], "")
+        self.assertEqual(ranlib_rejected["ranlib_plugin_option"], "")
+        self.assertEqual(ranlib_rejected["ranlib_command"], ())
+
+        for plugin_dir in hostile_directories:
+            with self.subTest(controller="libtool", plugin_dir=plugin_dir):
+                accepted = self.run_libtool_archive_probe(
+                    libtool_controller,
+                    controller_probe,
+                    controller_ranlib,
+                    controller_templates,
+                    msys_host,
+                    (selected_name,),
+                    ar_status=0,
+                    plugin_dir=plugin_dir,
+                )
+                option = f"--plugin={plugin_dir}/{selected_name}"
+                self.assertEqual(accepted["returncode"], 0)
+                self.assertEqual(accepted["stderr"], "")
+                self.assertEqual(accepted["plugin_option"], option)
+                self.assertEqual(
+                    accepted["AR"],
+                    "fake_ar --configured-ar-argument",
+                )
+                self.assertEqual(
+                    accepted["RANLIB"],
+                    "fake_ranlib --configured-ranlib-argument",
+                )
+                expected_ar = (
+                    "--configured-ar-argument",
+                    option,
+                    "rc",
+                    "conftest.a",
+                    "conftest.o",
+                )
+                expected_ar_probe = expected_ar[:-1] + ("conftest.c",)
+                expected_ranlib = (
+                    "--configured-ranlib-argument",
+                    option,
+                    "conftest.a",
+                )
+                self.assertEqual(
+                    accepted["ar_probe"], expected_ar_probe
+                )
+                self.assertEqual(accepted["ranlib_probe"], expected_ranlib)
+                self.assertEqual(accepted["ar_command"], expected_ar)
+                self.assertEqual(
+                    accepted["ranlib_command"], expected_ranlib
+                )
+                self.assertEqual(accepted["ar_command_status"], "0")
+                self.assertEqual(
+                    accepted["ranlib_command_status"], "0"
+                )
+                self.assertEqual(accepted["injected"], "no")
+                self.assertFalse(accepted["injected_file"])
 
     def test_required_mutation_controls(self):
         msys_host = self.canonical_target("arm64-pc-msys")
         linux_host = self.canonical_target("aarch64-pc-linux-gnu")
+        selected_name = PLUGIN_CANDIDATES["msys"][0]
+        space_dir = "space dir/glob*"
+        payload_dir = '/plugins/meta;$(touch "$INJECTION_FILE")&name'
 
         for controller in PLUGIN_CONTROLLERS:
             block = plugin_discovery_block(controller)
@@ -988,7 +1288,7 @@ printf "RANLIB=%s\n" "$RANLIB"
                 self.run_plugin_discovery(
                     loop_mutant,
                     msys_host,
-                    (PLUGIN_CANDIDATES["msys"][0],),
+                    (selected_name,),
                 ),
                 "",
             )
@@ -1005,10 +1305,10 @@ printf "RANLIB=%s\n" "$RANLIB"
                 self.run_plugin_discovery(
                     gate_mutant,
                     linux_host,
-                    (PLUGIN_CANDIDATES["msys"][0],),
+                    (selected_name,),
                     target=msys_host,
                 ),
-                "--plugin /plugins/msys-lto_plugin.dll",
+                "--plugin=/plugins/msys-lto_plugin.dll",
             )
 
             for family in ("cygwin", "msys", "mingw"):
@@ -1029,26 +1329,228 @@ printf "RANLIB=%s\n" "$RANLIB"
                     "",
                 )
 
+            expected = f"--plugin={space_dir}/{selected_name}"
+            quote_mutants = (
+                block.replace(
+                    'test "x$plugin_so" = "x$plugin"',
+                    "test x$plugin_so = x$plugin",
+                ),
+                block.replace(
+                    'test "x$plugin_so" != "x$plugin"',
+                    "test x$plugin_so != x$plugin",
+                ),
+            )
+            for quote_mutant in quote_mutants:
+                self.assertNotEqual(quote_mutant, block)
+                result = self.plugin_discovery_result(
+                    quote_mutant,
+                    msys_host,
+                    (selected_name,),
+                    plugin_dir=space_dir,
+                )
+                self.assertFalse(
+                    result.returncode == 0
+                    and result.stderr == ""
+                    and result.stdout.strip() == expected
+                )
+
+            scalar_mutant = block.replace(
+                'plugin_option="--plugin=$plugin_so"',
+                'plugin_option="--plugin $plugin_so"',
+            )
+            self.assertNotEqual(scalar_mutant, block)
+            self.assertNotEqual(
+                self.run_plugin_discovery(
+                    scalar_mutant,
+                    msys_host,
+                    (selected_name,),
+                    plugin_dir=space_dir,
+                ),
+                expected,
+            )
+
+        gcc_discovery = plugin_discovery_block(
+            Path("config/gcc-plugin.m4")
+        )
+        gcc_probe = gcc_plugin_archive_probe_block(
+            Path("config/gcc-plugin.m4")
+        )
+        gcc_probe_mutant = gcc_probe.replace(
+            '${AR} "$plugin_option" rc',
+            "${AR} $plugin_option rc",
+        )
+        self.assertNotEqual(gcc_probe_mutant, gcc_probe)
+        unused, unused_values, mutant_arguments = (
+            self.run_gcc_plugin_archive_probe(
+                gcc_discovery,
+                gcc_probe_mutant,
+                msys_host,
+                (selected_name,),
+                space_dir,
+            )
+        )
+        self.assertNotEqual(
+            mutant_arguments,
+            (
+                "--configured-ar-argument",
+                f"--plugin={space_dir}/{selected_name}",
+                "rc",
+                "conftest.a",
+                "conftest.c",
+            ),
+        )
+
+        discovery = plugin_discovery_block(Path("libtool.m4"))
         probe = libtool_archive_probe_block(Path("libtool.m4"))
+        ranlib = libtool_ranlib_block(Path("libtool.m4"))
+        templates = libtool_archive_templates_block(Path("libtool.m4"))
         clear_line = (
-            "      AC_MSG_WARN([Failed: $AR $plugin_option rc])\n"
+            '      AC_MSG_WARN([Failed: $AR "$plugin_option" rc])\n'
             "      plugin_option=\n"
         )
         clear_mutant = probe.replace(
             clear_line,
-            "      AC_MSG_WARN([Failed: $AR $plugin_option rc])\n",
+            '      AC_MSG_WARN([Failed: $AR "$plugin_option" rc])\n',
         )
         self.assertNotEqual(clear_mutant, probe)
         result = self.run_libtool_archive_probe(
-            plugin_discovery_block(Path("libtool.m4")),
+            discovery,
             clear_mutant,
-            libtool_ranlib_block(Path("libtool.m4")),
+            ranlib,
+            templates,
             msys_host,
-            (PLUGIN_CANDIDATES["msys"][0],),
+            (selected_name,),
             ar_status=1,
         )
         self.assertNotEqual(result["plugin_option"], "")
-        self.assertIn("--plugin", result["RANLIB"])
+        self.assertNotEqual(result["ranlib_probe"], ())
+
+        def has_exact_libtool_arguments(result, plugin_dir):
+            option = f"--plugin={plugin_dir}/{selected_name}"
+            expected_ar = (
+                "--configured-ar-argument",
+                option,
+                "rc",
+                "conftest.a",
+                "conftest.o",
+            )
+            expected_ar_probe = expected_ar[:-1] + ("conftest.c",)
+            expected_ranlib = (
+                "--configured-ranlib-argument",
+                option,
+                "conftest.a",
+            )
+            return (
+                result["returncode"] == 0
+                and result["stderr"] == ""
+                and result["ar_probe"] == expected_ar_probe
+                and result["ranlib_probe"] == expected_ranlib
+                and result["ar_command"] == expected_ar
+                and result["ranlib_command"] == expected_ranlib
+                and not result["injected_file"]
+            )
+
+        def assert_libtool_mutant_fails(
+            *,
+            archive_probe=probe,
+            ranlib_probe=ranlib,
+            archive_templates=templates,
+            plugin_dir=space_dir,
+        ):
+            mutant_result = self.run_libtool_archive_probe(
+                discovery,
+                archive_probe,
+                ranlib_probe,
+                archive_templates,
+                msys_host,
+                (selected_name,),
+                ar_status=0,
+                plugin_dir=plugin_dir,
+            )
+            self.assertFalse(
+                has_exact_libtool_arguments(mutant_result, plugin_dir)
+            )
+
+        unquoted_ar_probe = probe.replace(
+            '$AR "$plugin_option" rc', "$AR $plugin_option rc"
+        )
+        self.assertNotEqual(unquoted_ar_probe, probe)
+        assert_libtool_mutant_fails(archive_probe=unquoted_ar_probe)
+
+        unquoted_ranlib_probe = ranlib.replace(
+            '$RANLIB "$plugin_option" conftest.a',
+            "$RANLIB $plugin_option conftest.a",
+        )
+        self.assertNotEqual(unquoted_ranlib_probe, ranlib)
+        assert_libtool_mutant_fails(ranlib_probe=unquoted_ranlib_probe)
+
+        ar_quote_lines = (
+            '      ar_plugin_option=`$ECHO "$plugin_option" | '
+            '$SED "$sed_quote_subst"`\n'
+            '      ar_plugin_option="\\"$ar_plugin_option\\""\n'
+        )
+        ar_quote_mutant = probe.replace(
+            ar_quote_lines, "      ar_plugin_option=$plugin_option\n"
+        )
+        self.assertNotEqual(ar_quote_mutant, probe)
+        assert_libtool_mutant_fails(
+            archive_probe=ar_quote_mutant,
+            plugin_dir=payload_dir,
+        )
+
+        ranlib_quote_lines = (
+            '      ranlib_plugin_option=`$ECHO "$plugin_option" | '
+            '$SED "$sed_quote_subst"`\n'
+            '      ranlib_plugin_option="\\"$ranlib_plugin_option\\""\n'
+        )
+        ranlib_quote_mutant = ranlib.replace(
+            ranlib_quote_lines,
+            "      ranlib_plugin_option=$plugin_option\n",
+        )
+        self.assertNotEqual(ranlib_quote_mutant, ranlib)
+        assert_libtool_mutant_fails(
+            ranlib_probe=ranlib_quote_mutant,
+            plugin_dir=payload_dir,
+        )
+
+        unescaped_ar_quote = probe.replace(
+            ar_quote_lines,
+            '      ar_plugin_option="\\"$plugin_option\\""\n',
+        )
+        self.assertNotEqual(unescaped_ar_quote, probe)
+        assert_libtool_mutant_fails(
+            archive_probe=unescaped_ar_quote,
+            plugin_dir=payload_dir,
+        )
+
+        unescaped_ranlib_quote = ranlib.replace(
+            ranlib_quote_lines,
+            '      ranlib_plugin_option="\\"$plugin_option\\""\n',
+        )
+        self.assertNotEqual(unescaped_ranlib_quote, ranlib)
+        assert_libtool_mutant_fails(
+            ranlib_probe=unescaped_ranlib_quote,
+            plugin_dir=payload_dir,
+        )
+
+        ar_template_mutant = templates.replace(
+            'old_archive_cmds=\'$AR \'"$ar_plugin_option"'
+            "' $AR_FLAGS $oldlib$oldobjs'",
+            "old_archive_cmds='$AR $plugin_option "
+            "$AR_FLAGS $oldlib$oldobjs'",
+        )
+        self.assertNotEqual(ar_template_mutant, templates)
+        assert_libtool_mutant_fails(
+            archive_templates=ar_template_mutant
+        )
+
+        ranlib_template_mutant = templates.replace(
+            "$ranlib_plugin_option", "$plugin_option"
+        )
+        self.assertNotEqual(ranlib_template_mutant, templates)
+        assert_libtool_mutant_fails(
+            archive_templates=ranlib_template_mutant
+        )
 
         header = Path("gcc/config/i386/cygwin-w64.h")
         guarded = (

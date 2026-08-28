@@ -1382,29 +1382,31 @@ case "${host}" in
 esac
 plugin_option=
 for plugin in $plugin_names; do
-  plugin_so=`${CC} ${CFLAGS} --print-prog-name $plugin`
-  if test x$plugin_so = x$plugin; then
-    plugin_so=`${CC} ${CFLAGS} --print-file-name $plugin`
+  plugin_so=`${CC} ${CFLAGS} --print-prog-name "$plugin"`
+  if test "x$plugin_so" = "x$plugin"; then
+    plugin_so=`${CC} ${CFLAGS} --print-file-name "$plugin"`
   fi
-  if test x$plugin_so != x$plugin; then
-    plugin_option="--plugin $plugin_so"
+  if test "x$plugin_so" != "x$plugin"; then
+    plugin_option="--plugin=$plugin_so"
     break
   fi
 done
+ar_plugin_option=
+ranlib_plugin_option=
 
 AC_CHECK_TOOL(AR, ar, false)
 test -z "$AR" && AR=ar
 if test -n "$plugin_option"; then
   if $AR --help 2>&1 | grep -q "\--plugin"; then
     touch conftest.c
-    $AR $plugin_option rc conftest.a conftest.c
+    $AR "$plugin_option" rc conftest.a conftest.c
     if test "$?" != 0; then
-      AC_MSG_WARN([Failed: $AR $plugin_option rc])
+      AC_MSG_WARN([Failed: $AR "$plugin_option" rc])
       plugin_option=
     else
-      AR="$AR $plugin_option"
+      ar_plugin_option=`$ECHO "$plugin_option" | $SED "$sed_quote_subst"`
+      ar_plugin_option="\"$ar_plugin_option\""
     fi
-    rm -f conftest.*
   else
     plugin_option=
   fi
@@ -1421,27 +1423,50 @@ AC_CHECK_TOOL(RANLIB, ranlib, :)
 test -z "$RANLIB" && RANLIB=:
 if test -n "$plugin_option" && test "$RANLIB" != ":"; then
   if $RANLIB --help 2>&1 | grep -q "\--plugin"; then
-    RANLIB="$RANLIB $plugin_option"
+    $RANLIB "$plugin_option" conftest.a
+    if test "$?" != 0; then
+      AC_MSG_WARN([Failed: $RANLIB "$plugin_option" conftest.a])
+    else
+      ranlib_plugin_option=`$ECHO "$plugin_option" | $SED "$sed_quote_subst"`
+      ranlib_plugin_option="\"$ranlib_plugin_option\""
+    fi
   fi
 fi
+rm -f conftest.*
 _LT_DECL([], [RANLIB], [1],
     [Commands used to install an old-style archive])
 
 # Determine commands to create old-style static archives.
-old_archive_cmds='$AR $AR_FLAGS $oldlib$oldobjs'
+if test -n "$ar_plugin_option"; then
+  old_archive_cmds='$AR '"$ar_plugin_option"' $AR_FLAGS $oldlib$oldobjs'
+else
+  old_archive_cmds='$AR $AR_FLAGS $oldlib$oldobjs'
+fi
 old_postinstall_cmds='chmod 644 $oldlib'
 old_postuninstall_cmds=
 
 if test -n "$RANLIB"; then
-  case $host_os in
-  openbsd*)
-    old_postinstall_cmds="$old_postinstall_cmds~\$RANLIB -t \$oldlib"
-    ;;
-  *)
-    old_postinstall_cmds="$old_postinstall_cmds~\$RANLIB \$oldlib"
-    ;;
-  esac
-  old_archive_cmds="$old_archive_cmds~\$RANLIB \$oldlib"
+  if test -n "$ranlib_plugin_option"; then
+    case $host_os in
+    openbsd*)
+      old_postinstall_cmds="$old_postinstall_cmds~\$RANLIB $ranlib_plugin_option -t \$oldlib"
+      ;;
+    *)
+      old_postinstall_cmds="$old_postinstall_cmds~\$RANLIB $ranlib_plugin_option \$oldlib"
+      ;;
+    esac
+    old_archive_cmds="$old_archive_cmds~\$RANLIB $ranlib_plugin_option \$oldlib"
+  else
+    case $host_os in
+    openbsd*)
+      old_postinstall_cmds="$old_postinstall_cmds~\$RANLIB -t \$oldlib"
+      ;;
+    *)
+      old_postinstall_cmds="$old_postinstall_cmds~\$RANLIB \$oldlib"
+      ;;
+    esac
+    old_archive_cmds="$old_archive_cmds~\$RANLIB \$oldlib"
+  fi
 fi
 
 case $host_os in

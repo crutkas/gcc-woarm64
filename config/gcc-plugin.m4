@@ -148,27 +148,29 @@ case "${host}" in
 esac
 plugin_option=
 for plugin in $plugin_names; do
-  plugin_so=`${CC} ${CFLAGS} --print-prog-name $plugin`
-  if test x$plugin_so = x$plugin; then
-    plugin_so=`${CC} ${CFLAGS} --print-file-name $plugin`
+  plugin_so=`${CC} ${CFLAGS} --print-prog-name "$plugin"`
+  if test "x$plugin_so" = "x$plugin"; then
+    plugin_so=`${CC} ${CFLAGS} --print-file-name "$plugin"`
   fi
-  if test x$plugin_so != x$plugin; then
-    plugin_option="--plugin $plugin_so"
+  if test "x$plugin_so" != "x$plugin"; then
+    plugin_option="--plugin=$plugin_so"
     break
   fi
 done
-dnl Check if ${AR} $plugin_option rc works.
+dnl Check if ${AR} "$plugin_option" rc works.
 AC_CHECK_TOOL(AR, ar)
 if test "${AR}" = "" ; then
   AC_MSG_ERROR([Required archive tool 'ar' not found on PATH.])
 fi
-touch conftest.c
-${AR} $plugin_option rc conftest.a conftest.c
-if test "$?" != 0; then
-  AC_MSG_WARN([Failed: $AR $plugin_option rc])
-  plugin_option=
+if test -n "$plugin_option"; then
+  touch conftest.c
+  ${AR} "$plugin_option" rc conftest.a conftest.c
+  if test "$?" != 0; then
+    AC_MSG_WARN([Failed: $AR "$plugin_option" rc])
+    plugin_option=
+  fi
+  rm -f conftest.*
 fi
-rm -f conftest.*
 if test -n "$plugin_option"; then
   $1="$plugin_option"
   AC_MSG_RESULT($plugin_option)

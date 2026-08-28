@@ -369,7 +369,7 @@ AC_ARG_ENABLE(exec-static-tramp,
 
 if test "$enable_exec_static_tramp" = yes; then
 case "$target" in
-     *-cygwin*)
+     *-cygwin* | *-msys*)
      ;;
      *arm*-*-linux-* | aarch64*-*-linux-* | i*86-*-linux-* | x86_64-*-linux-*)
        AC_DEFINE(FFI_EXEC_STATIC_TRAMP, 1,

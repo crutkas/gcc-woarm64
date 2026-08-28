@@ -111,6 +111,21 @@ void *__dso_handle = 0;
 extern void __gcc_register_frame (void);
 extern void __gcc_deregister_frame (void);
 
+#if DEFAULT_USE_CXA_ATEXIT && defined (__CYGWIN__)
+/* This C++ ABI entry point is not declared by the C library headers.  */
+extern int __cxa_atexit (void (*) (void *), void *, void *);
+
+/* Retain the registration when SEH makes the cleanup currently empty.  */
+static void
+#if !DWARF2_UNWIND_INFO
+__attribute__((noipa))
+#endif
+__gcc_deregister_frame_atexit (void *arg __attribute__((unused)))
+{
+  __gcc_deregister_frame ();
+}
+#endif
+
 void
 __gcc_register_frame (void)
 {
@@ -147,9 +162,10 @@ __gcc_register_frame (void)
      at object construction,  also use atexit to register eh frame
      info cleanup.  */
 #ifdef __CYGWIN__
-  __cxa_atexit(__gcc_deregister_frame, NULL, (void *)&__dso_handle);
+  __cxa_atexit (__gcc_deregister_frame_atexit, NULL,
+		(void *) &__dso_handle);
 #else
-  atexit(__gcc_deregister_frame);
+  atexit (__gcc_deregister_frame);
 #endif /* __CYGWIN__ */
 #endif /* DEFAULT_USE_CXA_ATEXIT */
 }

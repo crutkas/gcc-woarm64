@@ -14125,7 +14125,12 @@ GDCFLAGS=${GDCFLAGS-${CFLAGS}}
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for -plugin option" >&5
 $as_echo_n "checking for -plugin option... " >&6; }
 
-plugin_names="liblto_plugin.so liblto_plugin-0.dll cyglto_plugin-0.dll msys-lto_plugin.dll msys-lto_plugin-0.dll"
+case "${host}" in
+  *-*-cygwin*) plugin_names="cyglto_plugin.dll cyglto_plugin-0.dll" ;;
+  *-*-msys*) plugin_names="msys-lto_plugin.dll msys-lto_plugin-0.dll" ;;
+  *-*-mingw*) plugin_names="liblto_plugin.dll liblto_plugin-0.dll" ;;
+  *) plugin_names="liblto_plugin.so" ;;
+esac
 plugin_option=
 for plugin in $plugin_names; do
   plugin_so=`${CC} ${CFLAGS} --print-prog-name $plugin`

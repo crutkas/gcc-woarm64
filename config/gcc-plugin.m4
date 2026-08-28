@@ -138,7 +138,14 @@ dnl
 AC_DEFUN([GCC_PLUGIN_OPTION],[dnl
 AC_MSG_CHECKING([for -plugin option])
 
-plugin_names="liblto_plugin.so liblto_plugin-0.dll cyglto_plugin-0.dll msys-lto_plugin.dll msys-lto_plugin-0.dll"
+dnl Select names for the host tools.  The unversioned DLL names match
+dnl gcc/config.host; retain the -0.dll names for older installations.
+case "${host}" in
+  *-*-cygwin*) plugin_names="cyglto_plugin.dll cyglto_plugin-0.dll" ;;
+  *-*-msys*) plugin_names="msys-lto_plugin.dll msys-lto_plugin-0.dll" ;;
+  *-*-mingw*) plugin_names="liblto_plugin.dll liblto_plugin-0.dll" ;;
+  *) plugin_names="liblto_plugin.so" ;;
+esac
 plugin_option=
 for plugin in $plugin_names; do
   plugin_so=`${CC} ${CFLAGS} --print-prog-name $plugin`

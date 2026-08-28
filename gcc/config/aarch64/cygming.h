@@ -26,6 +26,11 @@ along with GCC; see the file COPYING3.  If not see
 #undef ASM_SPEC
 #define ASM_SPEC "%(asm_cpu_spec)"
 
+#if defined (TARGET_CYGWIN64)
+# undef MULTILIB_DEFAULTS
+# define MULTILIB_DEFAULTS { "mabi=lp64" }
+#endif
+
 #undef PREFERRED_DEBUGGING_TYPE
 #define PREFERRED_DEBUGGING_TYPE DWARF2_DEBUG
 

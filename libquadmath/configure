@@ -5859,8 +5859,13 @@ test -z "$deplibs_check_method" && deplibs_check_method=unknown
 
 
 
+case "${host}" in
+  *-*-cygwin*) plugin_names="cyglto_plugin.dll cyglto_plugin-0.dll" ;;
+  *-*-msys*) plugin_names="msys-lto_plugin.dll msys-lto_plugin-0.dll" ;;
+  *-*-mingw*) plugin_names="liblto_plugin.dll liblto_plugin-0.dll" ;;
+  *) plugin_names="liblto_plugin.so" ;;
+esac
 plugin_option=
-plugin_names="liblto_plugin.so liblto_plugin-0.dll cyglto_plugin-0.dll msys-lto_plugin.dll msys-lto_plugin-0.dll"
 for plugin in $plugin_names; do
   plugin_so=`${CC} ${CFLAGS} --print-prog-name $plugin`
   if test x$plugin_so = x$plugin; then
@@ -5972,10 +5977,13 @@ if test -n "$plugin_option"; then
     if test "$?" != 0; then
       { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Failed: $AR $plugin_option rc" >&5
 $as_echo "$as_me: WARNING: Failed: $AR $plugin_option rc" >&2;}
+      plugin_option=
     else
       AR="$AR $plugin_option"
     fi
     rm -f conftest.*
+  else
+    plugin_option=
   fi
 fi
 test -z "$AR_FLAGS" && AR_FLAGS=cru
@@ -10928,7 +10936,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 10931 "configure"
+#line 10939 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -11034,7 +11042,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11037 "configure"
+#line 11045 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H

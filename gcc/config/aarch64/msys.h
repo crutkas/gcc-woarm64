@@ -30,9 +30,6 @@ along with GCC; see the file COPYING3.  If not see
     }									\
   while (0)
 
-#undef MULTILIB_DEFAULTS
-#define MULTILIB_DEFAULTS { "mabi=lp64" }
-
 #undef LIB_SPEC
 #define LIB_SPEC "\
   %{pg:-lgmon} \

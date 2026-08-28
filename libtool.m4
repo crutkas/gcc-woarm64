@@ -1372,8 +1372,15 @@ need_locks="$enable_libtool_lock"
 # _LT_CMD_OLD_ARCHIVE
 # -------------------
 m4_defun([_LT_CMD_OLD_ARCHIVE],
-[plugin_option=
-plugin_names="liblto_plugin.so liblto_plugin-0.dll cyglto_plugin-0.dll msys-lto_plugin.dll msys-lto_plugin-0.dll"
+[dnl Select names for the host tools.  The unversioned DLL names match
+dnl gcc/config.host; retain the -0.dll names for older installations.
+case "${host}" in
+  *-*-cygwin*) plugin_names="cyglto_plugin.dll cyglto_plugin-0.dll" ;;
+  *-*-msys*) plugin_names="msys-lto_plugin.dll msys-lto_plugin-0.dll" ;;
+  *-*-mingw*) plugin_names="liblto_plugin.dll liblto_plugin-0.dll" ;;
+  *) plugin_names="liblto_plugin.so" ;;
+esac
+plugin_option=
 for plugin in $plugin_names; do
   plugin_so=`${CC} ${CFLAGS} --print-prog-name $plugin`
   if test x$plugin_so = x$plugin; then
@@ -1393,10 +1400,13 @@ if test -n "$plugin_option"; then
     $AR $plugin_option rc conftest.a conftest.c
     if test "$?" != 0; then
       AC_MSG_WARN([Failed: $AR $plugin_option rc])
+      plugin_option=
     else
       AR="$AR $plugin_option"
     fi
     rm -f conftest.*
+  else
+    plugin_option=
   fi
 fi
 test -z "$AR_FLAGS" && AR_FLAGS=cru

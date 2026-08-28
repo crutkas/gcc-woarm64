@@ -12,7 +12,6 @@ target=fixinc.sh
 # Check for special fix rules for particular targets
 case $machine in
     i?86-*-cygwin* | \
-    aarch64-*-msys* | \
     *-mingw32* | \
     powerpc-*-eabisim* | \
     powerpc-*-eabi*    | \

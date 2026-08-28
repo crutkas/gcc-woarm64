@@ -138,7 +138,7 @@ dnl
 AC_DEFUN([GCC_PLUGIN_OPTION],[dnl
 AC_MSG_CHECKING([for -plugin option])
 
-plugin_names="liblto_plugin.so liblto_plugin-0.dll cyglto_plugin-0.dll"
+plugin_names="liblto_plugin.so liblto_plugin-0.dll cyglto_plugin-0.dll msys-lto_plugin.dll msys-lto_plugin-0.dll"
 plugin_option=
 for plugin in $plugin_names; do
   plugin_so=`${CC} ${CFLAGS} --print-prog-name $plugin`

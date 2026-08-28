@@ -23,6 +23,9 @@ along with GCC; see the file COPYING3.  If not see
 
 #define DWARF2_DEBUGGING_INFO 1
 
+#undef ASM_SPEC
+#define ASM_SPEC "%(asm_cpu_spec)"
+
 #undef PREFERRED_DEBUGGING_TYPE
 #define PREFERRED_DEBUGGING_TYPE DWARF2_DEBUG
 

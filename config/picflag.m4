@@ -23,10 +23,10 @@ case "${$2}" in
     hppa*64*-*-hpux*)
 	# PIC is the default for 64-bit PA HP-UX.
 	;;
-    i[[34567]]86-*-cygwin* | x86_64-*-cygwin* \
+    i[[34567]]86-*-cygwin* | x86_64-*-cygwin* | aarch64-*-cygwin* \
     | i[[34567]]86-*-msys* | x86_64-*-msys* | aarch64-*-msys*)
 	;;
-    i[[34567]]86-*-mingw* | x86_64-*-mingw*)
+    i[[34567]]86-*-mingw* | x86_64-*-mingw* | aarch64-*-mingw*)
 	;;
     i[[34567]]86-*-interix[[3-9]]*)
 	# Interix 3.x gcc -fpic/-fPIC options generate broken code.

@@ -30,10 +30,6 @@ along with GCC; see the file COPYING3.  If not see
     }									\
   while (0)
 
-/* Do not inherit the x86-64 driver defaults from cygwin-w64.h.  */
-#undef ASM_SPEC
-#define ASM_SPEC "%(asm_cpu_spec)"
-
 #undef MULTILIB_DEFAULTS
 #define MULTILIB_DEFAULTS { "mabi=lp64" }
 

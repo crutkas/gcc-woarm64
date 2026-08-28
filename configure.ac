@@ -844,6 +844,21 @@ case "${target}" in
     ;;
 esac
 
+# Disable the Ada frontend on AArch64 Windows targets.  gcc/ada/Makefile.rtl
+# only selects a Windows runtime pair set for cygwin%, mingw32% and pe, and
+# that set is x86-only: it unconditionally adds X86_TARGET_PAIRS or
+# X86_64_TARGET_PAIRS (a-nuauco__x86.ads), s-win32.o, s-winext.o, g-sse.o,
+# g-ssvety.o and libgnat/system-mingw.ads.  There is no AArch64 Windows
+# System package in gcc/ada/libgnat, so an AArch64 Windows build falls
+# through with SELECTED_PAIRS=PAIRS_NONE and would build a GNAT with no
+# runtime at all.  Refuse the language explicitly rather than fail late.
+# Please keep this in sync with contrib/config-list.mk.
+case "${target}" in
+aarch64*-*-cygwin* | aarch64*-*-msys* | aarch64*-*-mingw* | aarch64*-*-win* )
+    unsupported_languages="$unsupported_languages ada"
+    ;;
+esac
+
 # Only allow gdbserver on some systems.
 if test -d ${srcdir}/gdbserver; then
     if test x$enable_gdbserver = x; then
@@ -3913,11 +3928,16 @@ GCC_PLUGIN_OPTION(PLUGIN_OPTION)
 AR_PLUGIN_OPTION=
 RANLIB_PLUGIN_OPTION=
 if test -n "$PLUGIN_OPTION"; then
-  if $AR --help 2>&1 | grep -q "\--plugin"; then
-    AR_PLUGIN_OPTION="$PLUGIN_OPTION"
-  fi
-  if $RANLIB --help 2>&1 | grep -q "\--plugin"; then
-    RANLIB_PLUGIN_OPTION="$PLUGIN_OPTION"
+  plugin_make_arg=$PLUGIN_OPTION; func_plugin_make_quote
+  if test -z "$plugin_make_quoted"; then
+    AC_MSG_WARN([plugin path is not representable in a makefile, ignoring it])
+  else
+    if (set -f; eval "$AR --help") 2>&1 | grep -q "\--plugin"; then
+      AR_PLUGIN_OPTION=$plugin_make_quoted
+    fi
+    if (set -f; eval "$RANLIB --help") 2>&1 | grep -q "\--plugin"; then
+      RANLIB_PLUGIN_OPTION=$plugin_make_quoted
+    fi
   fi
 fi
 AC_SUBST(AR_PLUGIN_OPTION)

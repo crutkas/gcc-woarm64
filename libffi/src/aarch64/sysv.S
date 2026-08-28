@@ -26,6 +26,18 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.  */
 #include <ffi_cfi.h>
 #include "internal.h"
 
+/* Windows on AArch64 reserves x18 for the thread environment block, and
+   ffi_call_SYSV below installs the Go static chain into x18 on every call
+   (ordinary ffi_call reaches the same code path with a NULL chain) without
+   ever restoring it.  ffitarget.h must therefore never enable
+   FFI_GO_CLOSURES for a Windows AArch64 target, whatever combination of
+   _WIN32/_WIN64/__CYGWIN__/__MSYS__ that particular environment predefines.
+   Assert it here so a regression in that predicate fails to assemble
+   instead of silently corrupting the TEB pointer at run time.  */
+#if defined(FFI_GO_CLOSURES) && defined(FFI_AARCH64_WINDOWS)
+# error "FFI_GO_CLOSURES must stay disabled on Windows AArch64: x18 is reserved for the TEB"
+#endif
+
 #ifdef HAVE_MACHINE_ASM_H
 #include <machine/asm.h>
 #else

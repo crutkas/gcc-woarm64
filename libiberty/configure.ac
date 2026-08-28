@@ -115,14 +115,21 @@ AC_CHECK_TOOL(AR, ar)
 AC_CHECK_TOOL(RANLIB, ranlib, :)
 
 GCC_PLUGIN_OPTION(PLUGIN_OPTION)
+AR_PLUGIN_OPTION=
+RANLIB_PLUGIN_OPTION=
 if test -n "$PLUGIN_OPTION"; then
-  if $AR --help 2>&1 | grep -q "\--plugin"; then
-    AR_PLUGIN_OPTION="$PLUGIN_OPTION"
-    AC_SUBST(AR_PLUGIN_OPTION)
-  fi
-  if $RANLIB --help 2>&1 | grep -q "\--plugin"; then
-    RANLIB_PLUGIN_OPTION="$PLUGIN_OPTION"
-    AC_SUBST(RANLIB_PLUGIN_OPTION)
+  plugin_make_arg=$PLUGIN_OPTION; func_plugin_make_quote
+  if test -z "$plugin_make_quoted"; then
+    AC_MSG_WARN([plugin path is not representable in a makefile, ignoring it])
+  else
+    if (set -f; eval "$AR --help") 2>&1 | grep -q "\--plugin"; then
+      AR_PLUGIN_OPTION=$plugin_make_quoted
+      AC_SUBST(AR_PLUGIN_OPTION)
+    fi
+    if (set -f; eval "$RANLIB --help") 2>&1 | grep -q "\--plugin"; then
+      RANLIB_PLUGIN_OPTION=$plugin_make_quoted
+      AC_SUBST(RANLIB_PLUGIN_OPTION)
+    fi
   fi
 fi
 

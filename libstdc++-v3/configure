@@ -7106,6 +7106,30 @@ for plugin in $plugin_names; do
     break
   fi
 done
+# Quote a value so a later `eval' sees it as exactly one word.
+# AR and RANLIB are deliberately allowed to be command strings that carry
+# their own arguments, so they must be re-parsed by the shell rather than
+# quoted as a single word.  Re-parsing with `eval' also keeps a quoted
+# executable path such as "/opt/my tools/ar" in one piece.  The values we
+# append are therefore single-quoted here and pathname expansion is turned
+# off around the call, so a plugin path containing spaces, glob characters,
+# quotes or shell metacharacters reaches the tool as one argument and can
+# never start a command of its own.
+func_plugin_quote ()
+{
+  plugin_quoted=
+  plugin_quote_rest=$plugin_quote_arg
+  while :; do
+    case $plugin_quote_rest in
+      *\'*)
+        plugin_quoted=$plugin_quoted${plugin_quote_rest%%\'*}"'\\''"
+        plugin_quote_rest=${plugin_quote_rest#*\'} ;;
+      *)
+        plugin_quoted="'$plugin_quoted$plugin_quote_rest'"
+        break ;;
+    esac
+  done
+}
 ar_plugin_option=
 ranlib_plugin_option=
 
@@ -7203,16 +7227,20 @@ fi
 
 test -z "$AR" && AR=ar
 if test -n "$plugin_option"; then
-  if $AR --help 2>&1 | grep -q "\--plugin"; then
+  if (set -f; eval "$AR --help") 2>&1 | grep -q "\--plugin"; then
     touch conftest.c
-    $AR "$plugin_option" rc conftest.a conftest.c
+    plugin_quote_arg=$plugin_option; func_plugin_quote
+    (set -f; eval "$AR $plugin_quoted rc conftest.a conftest.c")
     if test "$?" != 0; then
       { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Failed: $AR \"$plugin_option\" rc" >&5
 $as_echo "$as_me: WARNING: Failed: $AR \"$plugin_option\" rc" >&2;}
       plugin_option=
     else
-      ar_plugin_option=`$ECHO "$plugin_option" | $SED "$sed_quote_subst"`
-      ar_plugin_option="\"$ar_plugin_option\""
+      # These values get spliced into old_archive_cmds, which libtool runs
+      # through two evals: one to expand the template and one to run it.
+      # The single-quoted form survives the second eval; escaping it for a
+      # double-quoted context lets it survive the first one unharmed.
+      ar_plugin_option=`$ECHO "$plugin_quoted" | $SED "$sed_quote_subst"`
     fi
   else
     plugin_option=
@@ -7423,14 +7451,15 @@ fi
 
 test -z "$RANLIB" && RANLIB=:
 if test -n "$plugin_option" && test "$RANLIB" != ":"; then
-  if $RANLIB --help 2>&1 | grep -q "\--plugin"; then
-    $RANLIB "$plugin_option" conftest.a
+  if (set -f; eval "$RANLIB --help") 2>&1 | grep -q "\--plugin"; then
+    plugin_quote_arg=$plugin_option; func_plugin_quote
+    (set -f; eval "$RANLIB $plugin_quoted conftest.a")
     if test "$?" != 0; then
       { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Failed: $RANLIB \"$plugin_option\" conftest.a" >&5
 $as_echo "$as_me: WARNING: Failed: $RANLIB \"$plugin_option\" conftest.a" >&2;}
     else
-      ranlib_plugin_option=`$ECHO "$plugin_option" | $SED "$sed_quote_subst"`
-      ranlib_plugin_option="\"$ranlib_plugin_option\""
+      # Escaped the same way as ar_plugin_option above, for the same reason.
+      ranlib_plugin_option=`$ECHO "$plugin_quoted" | $SED "$sed_quote_subst"`
     fi
   fi
 fi
@@ -12320,7 +12349,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 12323 "configure"
+#line 12352 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -12426,7 +12455,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 12429 "configure"
+#line 12458 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -16227,7 +16256,7 @@ $as_echo "$glibcxx_cv_atomic_long_long" >&6; }
   # Fake what AC_TRY_COMPILE does.
 
     cat > conftest.$ac_ext << EOF
-#line 16230 "configure"
+#line 16259 "configure"
 int main()
 {
   typedef bool atomic_type;
@@ -16262,7 +16291,7 @@ $as_echo "$glibcxx_cv_atomic_bool" >&6; }
     rm -f conftest*
 
     cat > conftest.$ac_ext << EOF
-#line 16265 "configure"
+#line 16294 "configure"
 int main()
 {
   typedef short atomic_type;
@@ -16297,7 +16326,7 @@ $as_echo "$glibcxx_cv_atomic_short" >&6; }
     rm -f conftest*
 
     cat > conftest.$ac_ext << EOF
-#line 16300 "configure"
+#line 16329 "configure"
 int main()
 {
   // NB: _Atomic_word not necessarily int.
@@ -16333,7 +16362,7 @@ $as_echo "$glibcxx_cv_atomic_int" >&6; }
     rm -f conftest*
 
     cat > conftest.$ac_ext << EOF
-#line 16336 "configure"
+#line 16365 "configure"
 int main()
 {
   typedef long long atomic_type;
@@ -16489,7 +16518,7 @@ $as_echo "mutex" >&6; }
   # unnecessary for this test.
 
     cat > conftest.$ac_ext << EOF
-#line 16492 "configure"
+#line 16521 "configure"
 int main()
 {
   _Decimal32 d1;
@@ -16531,7 +16560,7 @@ ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
   # unnecessary for this test.
 
   cat > conftest.$ac_ext << EOF
-#line 16534 "configure"
+#line 16563 "configure"
 template<typename T1, typename T2>
   struct same
   { typedef T2 type; };

@@ -1391,21 +1391,49 @@ for plugin in $plugin_names; do
     break
   fi
 done
+# Quote a value so a later `eval' sees it as exactly one word.
+# AR and RANLIB are deliberately allowed to be command strings that carry
+# their own arguments, so they must be re-parsed by the shell rather than
+# quoted as a single word.  Re-parsing with `eval' also keeps a quoted
+# executable path such as "/opt/my tools/ar" in one piece.  The values we
+# append are therefore single-quoted here and pathname expansion is turned
+# off around the call, so a plugin path containing spaces, glob characters,
+# quotes or shell metacharacters reaches the tool as one argument and can
+# never start a command of its own.
+func_plugin_quote ()
+{
+  plugin_quoted=
+  plugin_quote_rest=$plugin_quote_arg
+  while :; do
+    case $plugin_quote_rest in
+      *\'*)
+        plugin_quoted=$plugin_quoted${plugin_quote_rest%%\'*}"'\\''"
+        plugin_quote_rest=${plugin_quote_rest#*\'} ;;
+      *)
+        plugin_quoted="'$plugin_quoted$plugin_quote_rest'"
+        break ;;
+    esac
+  done
+}
 ar_plugin_option=
 ranlib_plugin_option=
 
 AC_CHECK_TOOL(AR, ar, false)
 test -z "$AR" && AR=ar
 if test -n "$plugin_option"; then
-  if $AR --help 2>&1 | grep -q "\--plugin"; then
+  if (set -f; eval "$AR --help") 2>&1 | grep -q "\--plugin"; then
     touch conftest.c
-    $AR "$plugin_option" rc conftest.a conftest.c
+    plugin_quote_arg=$plugin_option; func_plugin_quote
+    (set -f; eval "$AR $plugin_quoted rc conftest.a conftest.c")
     if test "$?" != 0; then
       AC_MSG_WARN([Failed: $AR "$plugin_option" rc])
       plugin_option=
     else
-      ar_plugin_option=`$ECHO "$plugin_option" | $SED "$sed_quote_subst"`
-      ar_plugin_option="\"$ar_plugin_option\""
+      # These values get spliced into old_archive_cmds, which libtool runs
+      # through two evals: one to expand the template and one to run it.
+      # The single-quoted form survives the second eval; escaping it for a
+      # double-quoted context lets it survive the first one unharmed.
+      ar_plugin_option=`$ECHO "$plugin_quoted" | $SED "$sed_quote_subst"`
     fi
   else
     plugin_option=
@@ -1422,13 +1450,14 @@ _LT_DECL([], [STRIP], [1], [A symbol stripping program])
 AC_CHECK_TOOL(RANLIB, ranlib, :)
 test -z "$RANLIB" && RANLIB=:
 if test -n "$plugin_option" && test "$RANLIB" != ":"; then
-  if $RANLIB --help 2>&1 | grep -q "\--plugin"; then
-    $RANLIB "$plugin_option" conftest.a
+  if (set -f; eval "$RANLIB --help") 2>&1 | grep -q "\--plugin"; then
+    plugin_quote_arg=$plugin_option; func_plugin_quote
+    (set -f; eval "$RANLIB $plugin_quoted conftest.a")
     if test "$?" != 0; then
       AC_MSG_WARN([Failed: $RANLIB "$plugin_option" conftest.a])
     else
-      ranlib_plugin_option=`$ECHO "$plugin_option" | $SED "$sed_quote_subst"`
-      ranlib_plugin_option="\"$ranlib_plugin_option\""
+      # Escaped the same way as ar_plugin_option above, for the same reason.
+      ranlib_plugin_option=`$ECHO "$plugin_quoted" | $SED "$sed_quote_subst"`
     fi
   fi
 fi

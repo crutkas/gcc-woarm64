@@ -9568,9 +9568,9 @@ gcc_host_pie=
 if test "${enable_host_pie+set}" = set; then :
   enableval=$enable_host_pie; host_pie=$enableval
  case $host in
-   *-*-darwin2*)
+   *-*-darwin2* | aarch64-*-mingw*)
      if test x$host_pie != xyes ; then
-       # for Darwin20+ this is required.
+       # Darwin20+ and Windows on AArch64 require PIE host executables.
        { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: PIE executables are required for the configured host, host-pie setting ignored." >&5
 $as_echo "$as_me: WARNING: PIE executables are required for the configured host, host-pie setting ignored." >&2;}
        host_pie=yes
@@ -9580,8 +9580,8 @@ $as_echo "$as_me: WARNING: PIE executables are required for the configured host,
  esac
 else
   case $host in
-  *-*-darwin2*)
-    # Default to PIE (mandatory for aarch64).
+  *-*-darwin2* | aarch64-*-mingw*)
+    # Default to PIE (mandatory for these hosts).
     host_pie=yes
     gcc_host_pie=--enable-host-pie
     ;;

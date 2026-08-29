@@ -2000,9 +2000,9 @@ AC_ARG_ENABLE(host-pie,
 		[build position independent host executables])],
 [host_pie=$enableval
  case $host in
-   *-*-darwin2*)
+   *-*-darwin2* | aarch64-*-mingw*)
      if test x$host_pie != xyes ; then
-       # for Darwin20+ this is required.
+       # Darwin20+ and Windows on AArch64 require PIE host executables.
        AC_MSG_WARN([PIE executables are required for the configured host, host-pie setting ignored.])
        host_pie=yes
        gcc_host_pie=--enable-host-pie
@@ -2010,8 +2010,8 @@ AC_ARG_ENABLE(host-pie,
   *) ;;
  esac],
 [case $host in
-  *-*-darwin2*)
-    # Default to PIE (mandatory for aarch64).
+  *-*-darwin2* | aarch64-*-mingw*)
+    # Default to PIE (mandatory for these hosts).
     host_pie=yes
     gcc_host_pie=--enable-host-pie
     ;;

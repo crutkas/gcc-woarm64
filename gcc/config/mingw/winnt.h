@@ -42,6 +42,7 @@ extern void mingw_pe_seh_init_sections (void);
 extern void mingw_pe_seh_cold_init (FILE *, const char *);
 extern void mingw_pe_seh_emit_except_personality (rtx);
 extern void mingw_pe_seh_end_prologue (FILE *);
+extern void mingw_pe_seh_begin_epilogue (FILE *);
 
 #endif /* not USED_FOR_TARGET.  */
 

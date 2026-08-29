@@ -51,6 +51,34 @@ struct aarch64_pair_fusion : public pair_fusion
 
   bool pair_mem_insn_p (rtx_insn *rti, bool &load_p) override final;
 
+  bool pair_mem_candidate_insn_p (rtx_insn *rti) override final
+  {
+#if defined (TARGET_AARCH64_MS_ABI)
+    if (TARGET_SEH)
+      {
+	rtx pat = PATTERN (rti);
+	if (RTX_FRAME_RELATED_P (rti))
+	  return false;
+	/* Also recognize frame candidates after their CFI notes have been
+	   transferred or simplified.  */
+	if (GET_CODE (pat) == SET)
+	  {
+	    rtx reg = MEM_P (SET_DEST (pat)) ? SET_SRC (pat) : SET_DEST (pat);
+	    rtx mem = MEM_P (SET_DEST (pat)) ? SET_DEST (pat) : SET_SRC (pat);
+	    unsigned int regno = REG_P (reg) ? REGNO (reg) : INVALID_REGNUM;
+	    if (REG_P (reg) && MEM_P (mem)
+		&& ((regno >= R19_REGNUM && regno <= R30_REGNUM)
+		    || (regno >= V8_REGNUM && regno <= V15_REGNUM))
+		&& (reg_mentioned_p (stack_pointer_rtx, XEXP (mem, 0))
+		    || reg_mentioned_p (hard_frame_pointer_rtx,
+					XEXP (mem, 0))))
+	      return false;
+	  }
+      }
+#endif
+    return true;
+  }
+
   bool pair_mem_ok_with_policy (rtx base_mem, bool load_p) override final
   {
     return aarch64_mem_ok_with_ldpstp_policy_model (base_mem,

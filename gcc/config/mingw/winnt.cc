@@ -1573,10 +1573,13 @@ aarch64_seh_emit_parallel (FILE *f, rtx pat)
 /* Emit the AArch64 unwind operation represented by PAT.  */
 
 static bool
-aarch64_seh_pattern_emit (FILE *f, struct seh_frame_state *seh, rtx pat)
+aarch64_seh_pattern_emit (FILE *f, struct seh_frame_state *seh, rtx pat,
+			  bool frame_related_p)
 {
   if (GET_CODE (pat) == PARALLEL)
     {
+      if (!seh->in_epilogue && !frame_related_p)
+	return false;
       return aarch64_seh_emit_parallel (f, pat);
     }
   if (GET_CODE (pat) != SET)
@@ -1655,6 +1658,11 @@ aarch64_seh_pattern_emit (FILE *f, struct seh_frame_state *seh, rtx pat)
   if (REG_P (dest) && seh->aarch64_temp_valid
       && REGNO (dest) == seh->aarch64_temp_regno)
     seh->aarch64_temp_valid = false;
+
+  /* Ordinary argument loads and stores can be scheduled into the prologue
+     and use callee-saved registers.  They are not unwind operations.  */
+  if (!seh->in_epilogue && !frame_related_p)
+    return false;
 
   rtx reg;
   rtx mem;
@@ -1739,13 +1747,20 @@ aarch64_pe_seh_unwind_emit (FILE *out_file, rtx_insn *insn)
     }
 
   rtx pat = PATTERN (insn);
+  bool frame_related_p = RTX_FRAME_RELATED_P (insn);
   for (rtx note = REG_NOTES (insn); note; note = XEXP (note, 1))
     {
       if (REG_NOTE_KIND (note) == REG_FRAME_RELATED_EXPR)
-	pat = XEXP (note, 0);
+	{
+	  pat = XEXP (note, 0);
+	  frame_related_p = true;
+	}
       else if (REG_NOTE_KIND (note) == REG_CFA_ADJUST_CFA
 	       && XEXP (note, 0))
-	pat = XEXP (note, 0);
+	{
+	  pat = XEXP (note, 0);
+	  frame_related_p = true;
+	}
     }
 
   if (aarch64_seh_scalable_pattern_p (pat))
@@ -1768,7 +1783,7 @@ aarch64_pe_seh_unwind_emit (FILE *out_file, rtx_insn *insn)
   for (unsigned int i = 1; i < insn_count; ++i)
     fputs ("\t.seh_nop\n", out_file);
 
-  if (!aarch64_seh_pattern_emit (out_file, seh, pat))
+  if (!aarch64_seh_pattern_emit (out_file, seh, pat, frame_related_p))
     fputs ("\t.seh_nop\n", out_file);
 }
 

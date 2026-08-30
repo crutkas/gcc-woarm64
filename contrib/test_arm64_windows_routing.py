@@ -105,6 +105,14 @@ def read_source(path):
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def read_blob_bytes(path):
+    return subprocess.run(
+        ["git", "-C", ROOT, "cat-file", "blob", f"HEAD:{path.as_posix()}"],
+        check=True,
+        stdout=subprocess.PIPE,
+    ).stdout
+
+
 def logical_lines(text):
     result = []
     pending = ""
@@ -2723,7 +2731,7 @@ fi
         """
         for path in PLUGIN_CONFIGURES:
             with self.subTest(path=str(path)):
-                data = (ROOT / path).read_bytes()
+                data = read_blob_bytes(path)
                 self.assertEqual(data[-12:], b'" >&2;}\nfi\n\n', str(path))
                 self.assertNotIn(b"\r", data, str(path))
 

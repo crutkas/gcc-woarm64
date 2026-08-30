@@ -106,6 +106,8 @@ def read_source(path):
 
 
 def read_blob_bytes(path):
+    if not (ROOT / ".git").exists():
+        return (ROOT / path).read_bytes()
     return subprocess.run(
         ["git", "-C", ROOT, "cat-file", "blob", f"HEAD:{path.as_posix()}"],
         check=True,

@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "tools": {
+    "g++": {
+      "expected_pass_floor": null,
+      "summary_heading": "=== g++ Summary ==="
+    },
+    "gcc": {
+      "expected_pass_floor": null,
+      "summary_heading": "=== gcc Summary ==="
+    },
+    "libstdc++": {
+      "expected_pass_floor": null,
+      "summary_heading": "=== libstdc++ Summary ==="
+    }
+  },
+  "rosters": {
+    "secondary": [
+      {
+        "path": "gcc/testsuite/gcc.dg/cygwin-crt-order-run-a.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.dg/cygwin-crt-order-run-b.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.dg/cygwin-crt-order-run-frame.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.dg/cygwin-crt-order-run.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.dg/cygwin-cxa-atexit-run.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.dg/cygwin-cxa-atexit-types.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/cygming-unprioritized-cdtor.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/cygwin-builtins.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/msys-builtins.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "libstdc++-v3/testsuite/20_util/from_chars/fast_float_aarch64_msys.cc",
+        "tool": "libstdc++"
+      }
+    ],
+    "seh": [
+      {
+        "path": "gcc/testsuite/g++.dg/eh/seh-aarch64-unwind.C",
+        "tool": "g++"
+      },
+      {
+        "path": "gcc/testsuite/gcc.dg/winapi-seh-types.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/seh-body-pair.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/seh-large-stackalloc.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/seh-leaf-stackalloc.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/seh-longjmp.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/seh-no-frame-pointer.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/seh-pac-a-key.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/seh-pac-b-key-v83.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/seh-pac-b-key.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/seh-partition.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/seh-sigfpe.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/seh-sigsegv.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/seh-stack-args.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/seh-sve-no-frame.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/seh-sve-stack-clash.c",
+        "tool": "gcc"
+      },
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/seh-unwind-directives.c",
+        "tool": "gcc"
+      }
+    ]
+  }
+}

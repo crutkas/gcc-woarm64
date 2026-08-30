@@ -24,3 +24,5 @@ jobs:
         run: python contrib/test_arm64_windows_routing.py
       - name: Test deterministic source archive
         run: python contrib/test_gcc_source_archive.py
+      - name: Test fail-closed testsuite accounting
+        run: python contrib/test_arm64_windows_testsuite_gate.py

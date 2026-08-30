@@ -15,6 +15,12 @@
     }
   },
   "rosters": {
+    "remediation": [
+      {
+        "path": "gcc/testsuite/gcc.target/aarch64/seh-fp-offset-epilogue.c",
+        "tool": "gcc"
+      }
+    ],
     "secondary": [
       {
         "path": "gcc/testsuite/gcc.dg/cygwin-crt-order-run-a.c",

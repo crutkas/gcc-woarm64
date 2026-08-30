@@ -2725,6 +2725,44 @@ fi
         rtl = read_source(Path("gcc/ada/Makefile.rtl"))
         self.assertNotIn("msys", rtl)
 
+    def test_aarch64_seh_fp_offset_epilogue_routing(self):
+        winnt = read_source(Path("gcc/config/mingw/winnt.cc"))
+        dispatcher = re.compile(
+            r"if \(seh->in_epilogue && dest == stack_pointer_rtx"
+            r".*?XEXP \(src, 0\) == hard_frame_pointer_rtx"
+            r".*?if \(offset <= 0\)"
+            r".*?\"\\t\.seh_add_fp\\t\" HOST_WIDE_INT_PRINT_DEC \"\\n\","
+            r"\s*-offset\);"
+            r".*?return true;",
+            re.DOTALL,
+        )
+        self.assertRegex(winnt, dispatcher)
+        self.assertNotRegex(winnt, r"\babs \(")
+
+        regression = read_source(
+            Path(
+                "gcc/testsuite/gcc.target/aarch64/"
+                "seh-fp-offset-epilogue.c"
+            )
+        )
+        self.assertIn(
+            r'scan-assembler "sub\tsp, x29, #16\n\t'
+            r'\\.seh_add_fp\t16(?:\n|$)"',
+            regression,
+        )
+        self.assertIn(
+            r'scan-assembler-times "\\.seh_add_fp\t16(?:\n|$)" 2',
+            regression,
+        )
+
+        mutations = (
+            winnt.replace("if (offset <= 0)", "if (offset >= 0)", 1),
+            winnt.replace("-offset);", "offset);", 1),
+            winnt.replace(".seh_add_fp", ".seh_nop", 1),
+        )
+        for mutation in mutations:
+            self.assertIsNone(dispatcher.search(mutation))
+
     def test_generated_configure_files_keep_inherited_eof_bytes(self):
         """Compare EOF bytes exactly rather than by a layout heuristic.
 

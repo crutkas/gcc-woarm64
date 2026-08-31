@@ -1088,7 +1088,7 @@ seh_emit_save (FILE *f, struct seh_frame_state *seh,
 	 : GP_REGNUM_P (regno) ?  " \t.seh_save_reg\t"
 	 : (gcc_unreachable (), "")), f);
   aarch64_print_reg (reg, 0, f);
-  fprintf (f, ", " HOST_WIDE_INT_PRINT_DEC " \n", abs (cfa_offset));
+  fprintf (f, ", " HOST_WIDE_INT_PRINT_DEC " \n", abs_hwi (cfa_offset));
   return;
 #endif
 
@@ -1117,7 +1117,7 @@ seh_emit_stackalloc (FILE *f, struct seh_frame_state *seh,
   /* We're only concerned with prologue stack allocations, which all
      are subtractions from the stack pointer.  */
 #if defined (TARGET_AARCH64_MS_ABI)
-  offset = abs (offset);
+  offset = abs_hwi (offset);
 #else
   gcc_assert (offset < 0);
   offset = -offset;
@@ -1396,7 +1396,7 @@ aarch64_seh_sp_offset (rtx addr, HOST_WIDE_INT *offset)
 	  && XEXP (update, 0) == stack_pointer_rtx
 	  && CONST_INT_P (XEXP (update, 1)))
 	{
-	  *offset = -abs (INTVAL (XEXP (update, 1)));
+	  *offset = -abs_hwi (INTVAL (XEXP (update, 1)));
 	  return true;
 	}
     }
@@ -1425,10 +1425,10 @@ aarch64_seh_emit_save (FILE *f, rtx reg, HOST_WIDE_INT offset)
 
   if (FP_REGNUM_P (regno))
     fprintf (f, "\t.seh_save_freg%s\td%u, " HOST_WIDE_INT_PRINT_DEC "\n",
-	     writeback ? "_x" : "", regno - V0_REGNUM, abs (offset));
+	     writeback ? "_x" : "", regno - V0_REGNUM, abs_hwi (offset));
   else if (GP_REGNUM_P (regno))
     fprintf (f, "\t.seh_save_reg%s\tx%u, " HOST_WIDE_INT_PRINT_DEC "\n",
-	     writeback ? "_x" : "", regno, abs (offset));
+	     writeback ? "_x" : "", regno, abs_hwi (offset));
   else
     gcc_unreachable ();
   return true;
@@ -1443,7 +1443,7 @@ aarch64_seh_emit_save_pair (FILE *f, unsigned int regno[2],
 {
   bool writeback = offset < 0;
   const char *suffix = writeback ? "_x" : "";
-  HOST_WIDE_INT abs_offset = abs (offset);
+  HOST_WIDE_INT abs_offset = abs_hwi (offset);
 
   if (regno[0] == FP_REGNUM && regno[1] == LR_REGNUM)
     {
@@ -1554,7 +1554,7 @@ aarch64_seh_emit_parallel (FILE *f, rtx pat)
     return false;
   if (reg_count == 1)
     {
-      HOST_WIDE_INT offset = sp_adjust ? -abs (sp_adjust) : offsets[0];
+      HOST_WIDE_INT offset = sp_adjust ? -abs_hwi (sp_adjust) : offsets[0];
       return aarch64_seh_emit_save (f, gen_rtx_REG (DImode, regno[0]),
 				    offset);
     }
@@ -1566,7 +1566,7 @@ aarch64_seh_emit_parallel (FILE *f, rtx pat)
     }
   gcc_assert (offsets[1] - offsets[0] == UNITS_PER_WORD);
 
-  HOST_WIDE_INT offset = sp_adjust ? -abs (sp_adjust) : offsets[0];
+  HOST_WIDE_INT offset = sp_adjust ? -abs_hwi (sp_adjust) : offsets[0];
   return aarch64_seh_emit_save_pair (f, regno, offset);
 }
 
@@ -1624,6 +1624,20 @@ aarch64_seh_pattern_emit (FILE *f, struct seh_frame_state *seh, rtx pat,
       return true;
     }
 
+  if (seh->in_epilogue && dest == stack_pointer_rtx
+      && GET_CODE (src) == PLUS
+      && XEXP (src, 0) == hard_frame_pointer_rtx
+      && CONST_INT_P (XEXP (src, 1)))
+    {
+      HOST_WIDE_INT offset = INTVAL (XEXP (src, 1));
+      if (offset <= 0)
+	{
+	  fprintf (f, "\t.seh_add_fp\t" HOST_WIDE_INT_PRINT_DEC "\n",
+		   -offset);
+	  return true;
+	}
+    }
+
   if (REG_P (dest) && GET_CODE (src) == PLUS
       && XEXP (src, 0) == stack_pointer_rtx
       && CONST_INT_P (XEXP (src, 1)))
@@ -1632,12 +1646,12 @@ aarch64_seh_pattern_emit (FILE *f, struct seh_frame_state *seh, rtx pat,
       if (dest == stack_pointer_rtx)
 	{
 	  seh_emit_stackalloc (f, seh, offset);
-	  return abs (offset) < SEH_MAX_FRAME_SIZE;
+	  return abs_hwi (offset) < SEH_MAX_FRAME_SIZE;
 	}
       else if (dest == hard_frame_pointer_rtx)
 	{
 	  fprintf (f, "\t.seh_add_fp\t" HOST_WIDE_INT_PRINT_DEC "\n",
-		   abs (offset));
+		   abs_hwi (offset));
 	  return true;
 	}
       return false;
@@ -1652,7 +1666,7 @@ aarch64_seh_pattern_emit (FILE *f, struct seh_frame_state *seh, rtx pat,
     {
       HOST_WIDE_INT offset = seh->aarch64_temp_value;
       seh_emit_stackalloc (f, seh, offset);
-      return abs (offset) < SEH_MAX_FRAME_SIZE;
+      return abs_hwi (offset) < SEH_MAX_FRAME_SIZE;
     }
 
   if (REG_P (dest) && seh->aarch64_temp_valid

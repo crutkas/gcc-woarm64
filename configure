@@ -3200,7 +3200,7 @@ fi
 # Configure extra directories which are host specific
 
 case "${host}" in
-  *-cygwin*)
+  *-cygwin* | *-msys*)
     configdirs="$configdirs libtermcap" ;;
 esac
 
@@ -3628,8 +3628,23 @@ esac
 # Disable the go frontend on systems where it is known to not work. Please keep
 # this in sync with contrib/config-list.mk.
 case "${target}" in
-*-*-darwin* | *-*-cygwin* | *-*-mingw* | bpf-* )
+*-*-darwin* | *-*-cygwin* | *-*-msys* | *-*-mingw* | bpf-* )
     unsupported_languages="$unsupported_languages go"
+    ;;
+esac
+
+# Disable the Ada frontend on AArch64 Windows targets.  gcc/ada/Makefile.rtl
+# only selects a Windows runtime pair set for cygwin%, mingw32% and pe, and
+# that set is x86-only: it unconditionally adds X86_TARGET_PAIRS or
+# X86_64_TARGET_PAIRS (a-nuauco__x86.ads), s-win32.o, s-winext.o, g-sse.o,
+# g-ssvety.o and libgnat/system-mingw.ads.  There is no AArch64 Windows
+# System package in gcc/ada/libgnat, so an AArch64 Windows build falls
+# through with SELECTED_PAIRS=PAIRS_NONE and would build a GNAT with no
+# runtime at all.  Refuse the language explicitly rather than fail late.
+# Please keep this in sync with contrib/config-list.mk.
+case "${target}" in
+aarch64*-*-cygwin* | aarch64*-*-msys* | aarch64*-*-mingw* | aarch64*-*-win* )
+    unsupported_languages="$unsupported_languages ada"
     ;;
 esac
 
@@ -3660,7 +3675,7 @@ if test x$enable_libgo = x; then
 	# PR 46986
 	noconfigdirs="$noconfigdirs target-libgo"
 	;;
-    *-*-cygwin* | *-*-mingw*)
+    *-*-cygwin* | *-*-msys* | *-*-mingw*)
 	noconfigdirs="$noconfigdirs target-libgo"
 	;;
     bpf-*-*)
@@ -3962,7 +3977,7 @@ case "${target}" in
   i[3456789]86-*-mingw*)
     target_configdirs="$target_configdirs target-winsup"
     ;;
-  *-*-cygwin*)
+  *-*-cygwin* | *-*-msys*)
     target_configdirs="$target_configdirs target-libtermcap target-winsup"
     noconfigdirs="$noconfigdirs target-libgloss"
     # always build newlib if winsup directory is present.
@@ -4118,7 +4133,7 @@ case "${host}" in
   i[3456789]86-*-msdosdjgpp*)
     host_makefile_frag="config/mh-djgpp"
     ;;
-  *-cygwin*)
+  *-cygwin* | *-msys*)
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking to see if cat works as expected" >&5
 $as_echo_n "checking to see if cat works as expected... " >&6; }
@@ -9482,7 +9497,7 @@ fi
 
 target_elf=no
 case $target in
-  *-darwin* | *-aix* | *-cygwin* | *-mingw* | *-aout* | *-*coff* | \
+  *-darwin* | *-aix* | *-cygwin* | *-msys* | *-mingw* | *-aout* | *-*coff* | \
   *-msdosdjgpp* | *-vms* | *-wince* | *-*-pe* | \
   alpha*-dec-osf* | *-interix* | hppa[12]*-*-hpux* | \
   nvptx-*-none)
@@ -9500,7 +9515,7 @@ if test $target_elf = yes; then :
 else
   if test x"$default_enable_lto" = x"yes" ; then
     case $target in
-      *-apple-darwin[912]* | *-cygwin* | *-mingw* | *djgpp*) ;;
+      *-apple-darwin[912]* | *-cygwin* | *-msys* | *-mingw* | *djgpp*) ;;
       # On other non-ELF platforms, LTO has yet to be validated.
       *) enable_lto=no ;;
     esac
@@ -9511,7 +9526,7 @@ else
   # warn during gcc/ subconfigure; unless you're bootstrapping with
   # -flto it won't be needed until after installation anyway.
     case $target in
-      *-cygwin* | *-mingw* | *-apple-darwin* | *djgpp*) ;;
+      *-cygwin* | *-msys* | *-mingw* | *-apple-darwin* | *djgpp*) ;;
       *) if test x"$enable_lto" = x"yes"; then
 	as_fn_error $? "LTO support is not enabled for this target." "$LINENO" 5
         fi
@@ -9521,7 +9536,7 @@ else
   # Among non-ELF, only Windows platforms support the lto-plugin so far.
   # Build it unless LTO was explicitly disabled.
   case $target in
-    *-cygwin* | *-mingw*) build_lto_plugin=$enable_lto ;;
+    *-cygwin* | *-msys* | *-mingw*) build_lto_plugin=$enable_lto ;;
     *) ;;
   esac
 
@@ -9553,9 +9568,9 @@ gcc_host_pie=
 if test "${enable_host_pie+set}" = set; then :
   enableval=$enable_host_pie; host_pie=$enableval
  case $host in
-   *-*-darwin2*)
+   *-*-darwin2* | aarch64-*-mingw*)
      if test x$host_pie != xyes ; then
-       # for Darwin20+ this is required.
+       # Darwin20+ and Windows on AArch64 require PIE host executables.
        { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: PIE executables are required for the configured host, host-pie setting ignored." >&5
 $as_echo "$as_me: WARNING: PIE executables are required for the configured host, host-pie setting ignored." >&2;}
        host_pie=yes
@@ -9565,8 +9580,8 @@ $as_echo "$as_me: WARNING: PIE executables are required for the configured host,
  esac
 else
   case $host in
-  *-*-darwin2*)
-    # Default to PIE (mandatory for aarch64).
+  *-*-darwin2* | aarch64-*-mingw*)
+    # Default to PIE (mandatory for these hosts).
     host_pie=yes
     gcc_host_pie=--enable-host-pie
     ;;
@@ -10071,7 +10086,7 @@ $as_echo "$as_me: WARNING: some C libraries are required to build $language: $mi
         # is position independent code (PIC).
         case $target in
           *mingw*) ;;
-          *cygwin*) ;;
+          *cygwin* | *msys*) ;;
           *)
           case ${add_this_lang}:${language}:${host_shared} in
             yes:jit:no)
@@ -10848,7 +10863,7 @@ rm -f conftest*
 case "${host}" in
   *-*-hpux*) RPATH_ENVVAR=SHLIB_PATH ;;
   *-*-darwin*) RPATH_ENVVAR=DYLD_LIBRARY_PATH ;;
-  *-*-mingw* | *-*-cygwin ) RPATH_ENVVAR=PATH ;;
+  *-*-mingw* | *-*-cygwin* | *-*-msys*) RPATH_ENVVAR=PATH ;;
   *) RPATH_ENVVAR=LD_LIBRARY_PATH ;;
 esac
 
@@ -11432,7 +11447,7 @@ case " $target_configdirs " in
   case " $target_configargs " in
   *" --with-newlib "*)
    case "$target" in
-    *-cygwin*)
+    *-cygwin* | *-msys*)
       FLAGS_FOR_TARGET=$FLAGS_FOR_TARGET' -L$$r/$(TARGET_SUBDIR)/winsup/cygwin -isystem $$s/winsup/cygwin/include'
       ;;
    esac
@@ -14125,18 +14140,92 @@ GDCFLAGS=${GDCFLAGS-${CFLAGS}}
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for -plugin option" >&5
 $as_echo_n "checking for -plugin option... " >&6; }
 
-plugin_names="liblto_plugin.so liblto_plugin-0.dll cyglto_plugin-0.dll"
+case "${host}" in
+  *-*-cygwin*) plugin_names="cyglto_plugin.dll cyglto_plugin-0.dll" ;;
+  *-*-msys*) plugin_names="msys-lto_plugin.dll msys-lto_plugin-0.dll" ;;
+  *-*-mingw*) plugin_names="liblto_plugin.dll liblto_plugin-0.dll" ;;
+  *) plugin_names="liblto_plugin.so" ;;
+esac
 plugin_option=
 for plugin in $plugin_names; do
-  plugin_so=`${CC} ${CFLAGS} --print-prog-name $plugin`
-  if test x$plugin_so = x$plugin; then
-    plugin_so=`${CC} ${CFLAGS} --print-file-name $plugin`
+  plugin_so=`${CC} ${CFLAGS} --print-prog-name "$plugin"`
+  if test "x$plugin_so" = "x$plugin"; then
+    plugin_so=`${CC} ${CFLAGS} --print-file-name "$plugin"`
   fi
-  if test x$plugin_so != x$plugin; then
-    plugin_option="--plugin $plugin_so"
+  if test "x$plugin_so" != "x$plugin"; then
+    plugin_option="--plugin=$plugin_so"
     break
   fi
 done
+# Quote a value so a later `eval' sees it as exactly one word.
+# AR and RANLIB are deliberately allowed to be command strings that carry
+# their own arguments, so they must be re-parsed by the shell rather than
+# quoted as a single word.  Re-parsing with `eval' also keeps a quoted
+# executable path such as "/opt/my tools/ar" in one piece.  The values we
+# append are therefore single-quoted here and pathname expansion is turned
+# off around the call, so a plugin path containing spaces, glob characters,
+# quotes or shell metacharacters reaches the tool as one argument and can
+# never start a command of its own.
+func_plugin_quote ()
+{
+  plugin_quoted=
+  plugin_quote_rest=$plugin_quote_arg
+  while :; do
+    case $plugin_quote_rest in
+      *\'*)
+        plugin_quoted=$plugin_quoted${plugin_quote_rest%%\'*}"'\\''"
+        plugin_quote_rest=${plugin_quote_rest#*\'} ;;
+      *)
+        plugin_quoted="'$plugin_quoted$plugin_quote_rest'"
+        break ;;
+    esac
+  done
+}
+# Replace every occurrence of $plugin_subst_from in $plugin_subst_in with
+# $plugin_subst_to, leaving the result in $plugin_subst_out.
+func_plugin_subst ()
+{
+  plugin_subst_out=
+  plugin_subst_rest=$plugin_subst_in
+  while :; do
+    case $plugin_subst_rest in
+      *"$plugin_subst_from"*)
+        plugin_subst_out=$plugin_subst_out${plugin_subst_rest%%"$plugin_subst_from"*}$plugin_subst_to
+        plugin_subst_rest=${plugin_subst_rest#*"$plugin_subst_from"} ;;
+      *)
+        plugin_subst_out=$plugin_subst_out$plugin_subst_rest
+        break ;;
+    esac
+  done
+}
+# Turn $plugin_make_arg into text that can be substituted into the AR or
+# RANLIB command string of a generated makefile.  It has to survive make
+# expansion and then the shell that runs the recipe, so quote it for the
+# shell first, then double every dollar sign and escape every hash so make
+# hands the shell back exactly the text we quoted.
+#
+# Makefiles also forward these command strings to sub-makes inside double
+# quotes, as in "AR=$(AR)", and a double-quoted word still expands dollar
+# signs and backquotes and is ended early by a double quote.  No single
+# piece of text can be correct both there and in a bare recipe word, and a
+# newline cannot be held in a makefile variable at all.  Values containing
+# any of those four characters are therefore refused by returning an empty
+# result, exactly as if the archiver had no plugin support, rather than
+# being spliced in raw where they would be expanded or would run.
+func_plugin_make_quote ()
+{
+  plugin_quote_arg=$plugin_make_arg; func_plugin_quote
+  plugin_subst_in=$plugin_quoted
+  plugin_subst_from='$'; plugin_subst_to='$$'; func_plugin_subst
+  plugin_subst_in=$plugin_subst_out
+  plugin_subst_from='#'; plugin_subst_to='\#'; func_plugin_subst
+  plugin_make_quoted=$plugin_subst_out
+  plugin_make_nl='
+'
+  case $plugin_make_arg in
+    *"$plugin_make_nl"* | *'$'* | *'`'* | *'"'*) plugin_make_quoted= ;;
+  esac
+}
 if test -n "$ac_tool_prefix"; then
   # Extract the first word of "${ac_tool_prefix}ar", so it can be a program name with args.
 set dummy ${ac_tool_prefix}ar; ac_word=$2
@@ -14232,14 +14321,17 @@ fi
 if test "${AR}" = "" ; then
   as_fn_error $? "Required archive tool 'ar' not found on PATH." "$LINENO" 5
 fi
-touch conftest.c
-${AR} $plugin_option rc conftest.a conftest.c
-if test "$?" != 0; then
-  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Failed: $AR $plugin_option rc" >&5
-$as_echo "$as_me: WARNING: Failed: $AR $plugin_option rc" >&2;}
-  plugin_option=
+if test -n "$plugin_option"; then
+  touch conftest.c
+  plugin_quote_arg=$plugin_option; func_plugin_quote
+  (set -f; eval "${AR} $plugin_quoted rc conftest.a conftest.c")
+  if test "$?" != 0; then
+    { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Failed: $AR \"$plugin_option\" rc" >&5
+$as_echo "$as_me: WARNING: Failed: $AR \"$plugin_option\" rc" >&2;}
+    plugin_option=
+  fi
+  rm -f conftest.*
 fi
-rm -f conftest.*
 if test -n "$plugin_option"; then
   PLUGIN_OPTION="$plugin_option"
   { $as_echo "$as_me:${as_lineno-$LINENO}: result: $plugin_option" >&5
@@ -14252,11 +14344,17 @@ fi
 AR_PLUGIN_OPTION=
 RANLIB_PLUGIN_OPTION=
 if test -n "$PLUGIN_OPTION"; then
-  if $AR --help 2>&1 | grep -q "\--plugin"; then
-    AR_PLUGIN_OPTION="$PLUGIN_OPTION"
-  fi
-  if $RANLIB --help 2>&1 | grep -q "\--plugin"; then
-    RANLIB_PLUGIN_OPTION="$PLUGIN_OPTION"
+  plugin_make_arg=$PLUGIN_OPTION; func_plugin_make_quote
+  if test -z "$plugin_make_quoted"; then
+    { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: plugin path is not representable in a makefile, ignoring it" >&5
+$as_echo "$as_me: WARNING: plugin path is not representable in a makefile, ignoring it" >&2;}
+  else
+    if (set -f; eval "$AR --help") 2>&1 | grep -q "\--plugin"; then
+      AR_PLUGIN_OPTION=$plugin_make_quoted
+    fi
+    if (set -f; eval "$RANLIB --help") 2>&1 | grep -q "\--plugin"; then
+      RANLIB_PLUGIN_OPTION=$plugin_make_quoted
+    fi
   fi
 fi
 

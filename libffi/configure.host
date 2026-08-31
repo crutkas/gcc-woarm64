@@ -6,7 +6,8 @@
 # THIS TABLE IS SORTED.  KEEP IT THAT WAY.
 # Most of the time we can define all the variables all at once...
 case "${host}" in
-  aarch64*-*-cygwin* | aarch64*-*-mingw* | aarch64*-*-win* )
+  aarch64*-*-cygwin* | aarch64*-*-msys* | aarch64*-*-mingw* \
+  | aarch64*-*-win* )
 	TARGET=ARM_WIN64; TARGETDIR=aarch64
 	if test "${ax_cv_c_compiler_vendor}" = "microsoft"; then
 	  MSVC=1

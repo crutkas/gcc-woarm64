@@ -60,8 +60,9 @@ extern void __gcc_deregister_frame (void);
 #pragma GCC diagnostic ignored "-Wprio-ctor-dtor"
 
 #ifdef __aarch64__
-/* constructor not yet enabled for aarch64 */
-static void register_frame_ctor (void);
+/* AArch64 PE does not support constructor priorities.  Since crtend.o
+   follows user objects, its unprioritized .ctors entry is still run first.  */
+static void register_frame_ctor (void) __attribute__ ((constructor));
 #else
 static void register_frame_ctor (void) __attribute__ ((constructor (0)));
 #endif
@@ -79,8 +80,8 @@ register_frame_ctor (void)
 #pragma GCC diagnostic ignored "-Wprio-ctor-dtor"
 
 #ifdef __aarch64__
-/* destructor not yet enabled for aarch64 */
-static void deregister_frame_dtor (void);
+/* The matching .dtors traversal runs this last, after user destructors.  */
+static void deregister_frame_dtor (void) __attribute__ ((destructor));
 #else
 static void deregister_frame_dtor (void) __attribute__ ((destructor (0)));
 #endif

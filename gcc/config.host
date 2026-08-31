@@ -235,6 +235,13 @@ case ${host} in
     host_exeext=.exe
     host_lto_plugin_soname=cyglto_plugin.dll
     ;;
+  i[34567]86-*-msys* | x86_64-*-msys* | aarch64-*-msys*)
+    host_xm_file=i386/xm-cygwin.h
+    out_host_hook_obj=host-cygwin.o
+    host_xmake_file="${host_xmake_file} i386/x-cygwin"
+    host_exeext=.exe
+    host_lto_plugin_soname=msys-lto_plugin.dll
+    ;;
   *-*-mingw*)
     host_xm_file=i386/xm-mingw32.h
     host_xmake_file="${host_xmake_file} ${host_xmake_mingw} i386/x-mingw32"

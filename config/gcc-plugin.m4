@@ -138,30 +138,109 @@ dnl
 AC_DEFUN([GCC_PLUGIN_OPTION],[dnl
 AC_MSG_CHECKING([for -plugin option])
 
-plugin_names="liblto_plugin.so liblto_plugin-0.dll cyglto_plugin-0.dll"
+dnl Select names for the host tools.  The unversioned DLL names match
+dnl gcc/config.host; retain the -0.dll names for older installations.
+case "${host}" in
+  *-*-cygwin*) plugin_names="cyglto_plugin.dll cyglto_plugin-0.dll" ;;
+  *-*-msys*) plugin_names="msys-lto_plugin.dll msys-lto_plugin-0.dll" ;;
+  *-*-mingw*) plugin_names="liblto_plugin.dll liblto_plugin-0.dll" ;;
+  *) plugin_names="liblto_plugin.so" ;;
+esac
 plugin_option=
 for plugin in $plugin_names; do
-  plugin_so=`${CC} ${CFLAGS} --print-prog-name $plugin`
-  if test x$plugin_so = x$plugin; then
-    plugin_so=`${CC} ${CFLAGS} --print-file-name $plugin`
+  plugin_so=`${CC} ${CFLAGS} --print-prog-name "$plugin"`
+  if test "x$plugin_so" = "x$plugin"; then
+    plugin_so=`${CC} ${CFLAGS} --print-file-name "$plugin"`
   fi
-  if test x$plugin_so != x$plugin; then
-    plugin_option="--plugin $plugin_so"
+  if test "x$plugin_so" != "x$plugin"; then
+    plugin_option="--plugin=$plugin_so"
     break
   fi
 done
-dnl Check if ${AR} $plugin_option rc works.
+# Quote a value so a later `eval' sees it as exactly one word.
+# AR and RANLIB are deliberately allowed to be command strings that carry
+# their own arguments, so they must be re-parsed by the shell rather than
+# quoted as a single word.  Re-parsing with `eval' also keeps a quoted
+# executable path such as "/opt/my tools/ar" in one piece.  The values we
+# append are therefore single-quoted here and pathname expansion is turned
+# off around the call, so a plugin path containing spaces, glob characters,
+# quotes or shell metacharacters reaches the tool as one argument and can
+# never start a command of its own.
+func_plugin_quote ()
+{
+  plugin_quoted=
+  plugin_quote_rest=$plugin_quote_arg
+  while :; do
+    case $plugin_quote_rest in
+      *\'*)
+        plugin_quoted=$plugin_quoted${plugin_quote_rest%%\'*}"'\\''"
+        plugin_quote_rest=${plugin_quote_rest#*\'} ;;
+      *)
+        plugin_quoted="'$plugin_quoted$plugin_quote_rest'"
+        break ;;
+    esac
+  done
+}
+# Replace every occurrence of $plugin_subst_from in $plugin_subst_in with
+# $plugin_subst_to, leaving the result in $plugin_subst_out.
+func_plugin_subst ()
+{
+  plugin_subst_out=
+  plugin_subst_rest=$plugin_subst_in
+  while :; do
+    case $plugin_subst_rest in
+      *"$plugin_subst_from"*)
+        plugin_subst_out=$plugin_subst_out${plugin_subst_rest%%"$plugin_subst_from"*}$plugin_subst_to
+        plugin_subst_rest=${plugin_subst_rest#*"$plugin_subst_from"} ;;
+      *)
+        plugin_subst_out=$plugin_subst_out$plugin_subst_rest
+        break ;;
+    esac
+  done
+}
+# Turn $plugin_make_arg into text that can be substituted into the AR or
+# RANLIB command string of a generated makefile.  It has to survive make
+# expansion and then the shell that runs the recipe, so quote it for the
+# shell first, then double every dollar sign and escape every hash so make
+# hands the shell back exactly the text we quoted.
+#
+# Makefiles also forward these command strings to sub-makes inside double
+# quotes, as in "AR=$(AR)", and a double-quoted word still expands dollar
+# signs and backquotes and is ended early by a double quote.  No single
+# piece of text can be correct both there and in a bare recipe word, and a
+# newline cannot be held in a makefile variable at all.  Values containing
+# any of those four characters are therefore refused by returning an empty
+# result, exactly as if the archiver had no plugin support, rather than
+# being spliced in raw where they would be expanded or would run.
+func_plugin_make_quote ()
+{
+  plugin_quote_arg=$plugin_make_arg; func_plugin_quote
+  plugin_subst_in=$plugin_quoted
+  plugin_subst_from='$'; plugin_subst_to='$$'; func_plugin_subst
+  plugin_subst_in=$plugin_subst_out
+  plugin_subst_from='#'; plugin_subst_to='\#'; func_plugin_subst
+  plugin_make_quoted=$plugin_subst_out
+  plugin_make_nl='
+'
+  case $plugin_make_arg in
+    *"$plugin_make_nl"* | *'$'* | *'`'* | *'"'*) plugin_make_quoted= ;;
+  esac
+}
+dnl Check if ${AR} "$plugin_option" rc works.
 AC_CHECK_TOOL(AR, ar)
 if test "${AR}" = "" ; then
   AC_MSG_ERROR([Required archive tool 'ar' not found on PATH.])
 fi
-touch conftest.c
-${AR} $plugin_option rc conftest.a conftest.c
-if test "$?" != 0; then
-  AC_MSG_WARN([Failed: $AR $plugin_option rc])
-  plugin_option=
+if test -n "$plugin_option"; then
+  touch conftest.c
+  plugin_quote_arg=$plugin_option; func_plugin_quote
+  (set -f; eval "${AR} $plugin_quoted rc conftest.a conftest.c")
+  if test "$?" != 0; then
+    AC_MSG_WARN([Failed: $AR "$plugin_option" rc])
+    plugin_option=
+  fi
+  rm -f conftest.*
 fi
-rm -f conftest.*
 if test -n "$plugin_option"; then
   $1="$plugin_option"
   AC_MSG_RESULT($plugin_option)

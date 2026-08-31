@@ -21,8 +21,10 @@ along with GCC; see the file COPYING3.  If not see
 
 /* Enable multilib.  */
 
-#undef ASM_SPEC
-#define ASM_SPEC "%{m32:--32} %{m64:--64}"
+#if !defined (TARGET_AARCH64_MS_ABI)
+# undef ASM_SPEC
+# define ASM_SPEC "%{m32:--32} %{m64:--64}"
+#endif
 
 /* To implement C++ function replacement we always wrap the cxx
    malloc-like operators.  See N2800 #17.6.4.6 [replacement.functions] */
@@ -57,8 +59,10 @@ along with GCC; see the file COPYING3.  If not see
 #endif
 #define SUB_LINK_ENTRY "%{" SPEC_64 ":" SUB_LINK_ENTRY64 "} %{" SPEC_32 ":" SUB_LINK_ENTRY32 "}"
 
-#undef MULTILIB_DEFAULTS
-#define MULTILIB_DEFAULTS { "m64" }
+#if !defined (TARGET_AARCH64_MS_ABI)
+# undef MULTILIB_DEFAULTS
+# define MULTILIB_DEFAULTS { "m64" }
+#endif
 
 #undef LINK_SPEC
 #define LINK_SPEC SUB_LINK_SPEC "\

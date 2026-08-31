@@ -1372,31 +1372,71 @@ need_locks="$enable_libtool_lock"
 # _LT_CMD_OLD_ARCHIVE
 # -------------------
 m4_defun([_LT_CMD_OLD_ARCHIVE],
-[plugin_option=
-plugin_names="liblto_plugin.so liblto_plugin-0.dll cyglto_plugin-0.dll"
+[dnl Select names for the host tools.  The unversioned DLL names match
+dnl gcc/config.host; retain the -0.dll names for older installations.
+case "${host}" in
+  *-*-cygwin*) plugin_names="cyglto_plugin.dll cyglto_plugin-0.dll" ;;
+  *-*-msys*) plugin_names="msys-lto_plugin.dll msys-lto_plugin-0.dll" ;;
+  *-*-mingw*) plugin_names="liblto_plugin.dll liblto_plugin-0.dll" ;;
+  *) plugin_names="liblto_plugin.so" ;;
+esac
+plugin_option=
 for plugin in $plugin_names; do
-  plugin_so=`${CC} ${CFLAGS} --print-prog-name $plugin`
-  if test x$plugin_so = x$plugin; then
-    plugin_so=`${CC} ${CFLAGS} --print-file-name $plugin`
+  plugin_so=`${CC} ${CFLAGS} --print-prog-name "$plugin"`
+  if test "x$plugin_so" = "x$plugin"; then
+    plugin_so=`${CC} ${CFLAGS} --print-file-name "$plugin"`
   fi
-  if test x$plugin_so != x$plugin; then
-    plugin_option="--plugin $plugin_so"
+  if test "x$plugin_so" != "x$plugin"; then
+    plugin_option="--plugin=$plugin_so"
     break
   fi
 done
+# Quote a value so a later `eval' sees it as exactly one word.
+# AR and RANLIB are deliberately allowed to be command strings that carry
+# their own arguments, so they must be re-parsed by the shell rather than
+# quoted as a single word.  Re-parsing with `eval' also keeps a quoted
+# executable path such as "/opt/my tools/ar" in one piece.  The values we
+# append are therefore single-quoted here and pathname expansion is turned
+# off around the call, so a plugin path containing spaces, glob characters,
+# quotes or shell metacharacters reaches the tool as one argument and can
+# never start a command of its own.
+func_plugin_quote ()
+{
+  plugin_quoted=
+  plugin_quote_rest=$plugin_quote_arg
+  while :; do
+    case $plugin_quote_rest in
+      *\'*)
+        plugin_quoted=$plugin_quoted${plugin_quote_rest%%\'*}"'\\''"
+        plugin_quote_rest=${plugin_quote_rest#*\'} ;;
+      *)
+        plugin_quoted="'$plugin_quoted$plugin_quote_rest'"
+        break ;;
+    esac
+  done
+}
+ar_plugin_option=
+ranlib_plugin_option=
 
 AC_CHECK_TOOL(AR, ar, false)
 test -z "$AR" && AR=ar
 if test -n "$plugin_option"; then
-  if $AR --help 2>&1 | grep -q "\--plugin"; then
+  if (set -f; eval "$AR --help") 2>&1 | grep -q "\--plugin"; then
     touch conftest.c
-    $AR $plugin_option rc conftest.a conftest.c
+    plugin_quote_arg=$plugin_option; func_plugin_quote
+    (set -f; eval "$AR $plugin_quoted rc conftest.a conftest.c")
     if test "$?" != 0; then
-      AC_MSG_WARN([Failed: $AR $plugin_option rc])
+      AC_MSG_WARN([Failed: $AR "$plugin_option" rc])
+      plugin_option=
     else
-      AR="$AR $plugin_option"
+      # These values get spliced into old_archive_cmds, which libtool runs
+      # through two evals: one to expand the template and one to run it.
+      # The single-quoted form survives the second eval; escaping it for a
+      # double-quoted context lets it survive the first one unharmed.
+      ar_plugin_option=`$ECHO "$plugin_quoted" | $SED "$sed_quote_subst"`
     fi
-    rm -f conftest.*
+  else
+    plugin_option=
   fi
 fi
 test -z "$AR_FLAGS" && AR_FLAGS=cru
@@ -1410,28 +1450,52 @@ _LT_DECL([], [STRIP], [1], [A symbol stripping program])
 AC_CHECK_TOOL(RANLIB, ranlib, :)
 test -z "$RANLIB" && RANLIB=:
 if test -n "$plugin_option" && test "$RANLIB" != ":"; then
-  if $RANLIB --help 2>&1 | grep -q "\--plugin"; then
-    RANLIB="$RANLIB $plugin_option"
+  if (set -f; eval "$RANLIB --help") 2>&1 | grep -q "\--plugin"; then
+    plugin_quote_arg=$plugin_option; func_plugin_quote
+    (set -f; eval "$RANLIB $plugin_quoted conftest.a")
+    if test "$?" != 0; then
+      AC_MSG_WARN([Failed: $RANLIB "$plugin_option" conftest.a])
+    else
+      # Escaped the same way as ar_plugin_option above, for the same reason.
+      ranlib_plugin_option=`$ECHO "$plugin_quoted" | $SED "$sed_quote_subst"`
+    fi
   fi
 fi
+rm -f conftest.*
 _LT_DECL([], [RANLIB], [1],
     [Commands used to install an old-style archive])
 
 # Determine commands to create old-style static archives.
-old_archive_cmds='$AR $AR_FLAGS $oldlib$oldobjs'
+if test -n "$ar_plugin_option"; then
+  old_archive_cmds='$AR '"$ar_plugin_option"' $AR_FLAGS $oldlib$oldobjs'
+else
+  old_archive_cmds='$AR $AR_FLAGS $oldlib$oldobjs'
+fi
 old_postinstall_cmds='chmod 644 $oldlib'
 old_postuninstall_cmds=
 
 if test -n "$RANLIB"; then
-  case $host_os in
-  openbsd*)
-    old_postinstall_cmds="$old_postinstall_cmds~\$RANLIB -t \$oldlib"
-    ;;
-  *)
-    old_postinstall_cmds="$old_postinstall_cmds~\$RANLIB \$oldlib"
-    ;;
-  esac
-  old_archive_cmds="$old_archive_cmds~\$RANLIB \$oldlib"
+  if test -n "$ranlib_plugin_option"; then
+    case $host_os in
+    openbsd*)
+      old_postinstall_cmds="$old_postinstall_cmds~\$RANLIB $ranlib_plugin_option -t \$oldlib"
+      ;;
+    *)
+      old_postinstall_cmds="$old_postinstall_cmds~\$RANLIB $ranlib_plugin_option \$oldlib"
+      ;;
+    esac
+    old_archive_cmds="$old_archive_cmds~\$RANLIB $ranlib_plugin_option \$oldlib"
+  else
+    case $host_os in
+    openbsd*)
+      old_postinstall_cmds="$old_postinstall_cmds~\$RANLIB -t \$oldlib"
+      ;;
+    *)
+      old_postinstall_cmds="$old_postinstall_cmds~\$RANLIB \$oldlib"
+      ;;
+    esac
+    old_archive_cmds="$old_archive_cmds~\$RANLIB \$oldlib"
+  fi
 fi
 
 case $host_os in
@@ -1570,7 +1634,7 @@ AC_CACHE_VAL([lt_cv_sys_max_cmd_len], [dnl
     lt_cv_sys_max_cmd_len=-1;
     ;;
 
-  cygwin* | mingw* | cegcc*)
+  cygwin* | msys* | mingw* | cegcc*)
     # On Win9x/ME, this test blows up -- it succeeds, but takes
     # about 5 minutes as the teststring grows exponentially.
     # Worse, since 9x/ME are not pre-emptively multitasking,
@@ -1812,7 +1876,7 @@ else
     lt_cv_dlopen_libs=
     ;;
 
-  cygwin*)
+  cygwin* | msys*)
     lt_cv_dlopen="dlopen"
     lt_cv_dlopen_libs=
     ;;
@@ -2283,14 +2347,14 @@ bsdi[[45]]*)
   # libtool to hard-code these into programs
   ;;
 
-cygwin* | mingw* | pw32* | cegcc*)
+cygwin* | msys* | mingw* | pw32* | cegcc*)
   version_type=windows
   shrext_cmds=".dll"
   need_version=no
   need_lib_prefix=no
 
   case $GCC,$host_os in
-  yes,cygwin* | yes,mingw* | yes,pw32* | yes,cegcc*)
+  yes,cygwin* | yes,msys* | yes,mingw* | yes,pw32* | yes,cegcc*)
     library_names_spec='$libname.dll.a'
     # DLL is installed to $(libdir)/../bin by postinstall_cmds
     postinstall_cmds='base_file=`basename \${file}`~
@@ -2311,6 +2375,12 @@ cygwin* | mingw* | pw32* | cegcc*)
     cygwin*)
       # Cygwin DLLs use 'cyg' prefix rather than 'lib'
       soname_spec='`echo ${libname} | sed -e 's/^lib/cyg/'``echo ${release} | $SED -e 's/[[.]]/-/g'`${versuffix}${shared_ext}'
+m4_if([$1], [],[
+      sys_lib_search_path_spec="$sys_lib_search_path_spec /usr/lib/w32api"])
+      ;;
+    msys*)
+      # MSYS DLLs use 'msys-' prefix rather than 'lib'
+      soname_spec='`echo ${libname} | sed -e 's/^lib/msys-/'``echo ${release} | $SED -e 's/[[.]]/-/g'`${versuffix}${shared_ext}'
 m4_if([$1], [],[
       sys_lib_search_path_spec="$sys_lib_search_path_spec /usr/lib/w32api"])
       ;;
@@ -3094,7 +3164,7 @@ bsdi[[45]]*)
   lt_cv_file_magic_test_file=/shlib/libc.so
   ;;
 
-cygwin*)
+cygwin* | msys*)
   # func_win32_libid is a shell function defined in ltmain.sh
   lt_cv_deplibs_check_method='file_magic ^x86 archive import|^x86 DLL'
   lt_cv_file_magic_cmd='func_win32_libid'
@@ -3391,7 +3461,7 @@ AC_DEFUN([LT_LIB_M],
 [AC_REQUIRE([AC_CANONICAL_HOST])dnl
 LIBM=
 case $host in
-*-*-beos* | *-*-cegcc* | *-*-cygwin* | *-*-haiku* | *-*-pw32* | *-*-darwin*)
+*-*-beos* | *-*-cegcc* | *-*-cygwin* | *-*-msys* | *-*-haiku* | *-*-pw32* | *-*-darwin*)
   # These system don't have libm, or don't need it
   ;;
 *-ncr-sysv4.3*)
@@ -3466,7 +3536,7 @@ case $host_os in
 aix*)
   symcode='[[BCDT]]'
   ;;
-cygwin* | mingw* | pw32* | cegcc*)
+cygwin* | msys* | mingw* | pw32* | cegcc*)
   symcode='[[ABCDGISTW]]'
   ;;
 hpux*)
@@ -3713,7 +3783,7 @@ m4_if([$1], [CXX], [
     beos* | irix5* | irix6* | nonstopux* | osf3* | osf4* | osf5*)
       # PIC is the default for these OSes.
       ;;
-    mingw* | cygwin* | os2* | pw32* | cegcc*)
+    mingw* | cygwin* | msys* | os2* | pw32* | cegcc*)
       # This hack is so that the source file can tell whether it is being
       # built for inclusion in a dll (and should export symbols for example).
       # Although the cygwin gcc ignores -fPIC, still need this for old-style
@@ -4026,7 +4096,7 @@ m4_if([$1], [CXX], [
       # PIC is the default for these OSes.
       ;;
 
-    mingw* | cygwin* | pw32* | os2* | cegcc*)
+    mingw* | cygwin* | msys* | pw32* | os2* | cegcc*)
       # This hack is so that the source file can tell whether it is being
       # built for inclusion in a dll (and should export symbols for example).
       # Although the cygwin gcc ignores -fPIC, still need this for old-style
@@ -4109,7 +4179,7 @@ m4_if([$1], [CXX], [
       fi
       ;;
 
-    mingw* | cygwin* | pw32* | os2* | cegcc*)
+    mingw* | cygwin* | msys* | pw32* | os2* | cegcc*)
       # This hack is so that the source file can tell whether it is being
       # built for inclusion in a dll (and should export symbols for example).
       m4_if([$1], [GCJ], [],
@@ -4342,7 +4412,7 @@ m4_if([$1], [CXX], [
   pw32*)
     _LT_TAGVAR(export_symbols_cmds, $1)="$ltdll_cmds"
   ;;
-  cygwin* | mingw* | cegcc*)
+  cygwin* | msys* | mingw* | cegcc*)
     _LT_TAGVAR(export_symbols_cmds, $1)='$NM $libobjs $convenience | $global_symbol_pipe | $SED -e '\''/^[[BCDGRS]][[ ]]/s/.*[[ ]]\([[^ ]]*\)/\1 DATA/;/^.*[[ ]]__nm__/s/^.*[[ ]]__nm__\([[^ ]]*\)[[ ]][[^ ]]*/\1 DATA/;/^I[[ ]]/d;/^[[AITW]][[ ]]/s/.* //'\'' | sort | uniq > $export_symbols'
   ;;
   *)
@@ -4394,7 +4464,7 @@ dnl Note also adjust exclude_expsyms for C++ above.
   extract_expsyms_cmds=
 
   case $host_os in
-  cygwin* | mingw* | pw32* | cegcc*)
+  cygwin* | msys* | mingw* | pw32* | cegcc*)
     # FIXME: the MSVC++ port hasn't been tested in a loooong time
     # When not using gcc, we currently assume that we are using
     # Microsoft Visual C++.
@@ -4509,7 +4579,7 @@ _LT_EOF
       fi
       ;;
 
-    cygwin* | mingw* | pw32* | cegcc*)
+    cygwin* | msys* | mingw* | pw32* | cegcc*)
       # _LT_TAGVAR(hardcode_libdir_flag_spec, $1) is actually meaningless,
       # as there is no search path for DLLs.
       _LT_TAGVAR(hardcode_libdir_flag_spec, $1)='-L$libdir'
@@ -4882,7 +4952,7 @@ _LT_EOF
       _LT_TAGVAR(export_dynamic_flag_spec, $1)=-rdynamic
       ;;
 
-    cygwin* | mingw* | pw32* | cegcc*)
+    cygwin* | msys* | mingw* | pw32* | cegcc*)
       # When not using gcc, we currently assume that we are using
       # Microsoft Visual C++.
       # hardcode_libdir_flag_spec is actually meaningless, as there is
@@ -5826,7 +5896,7 @@ if test "$_lt_caught_CXX_error" != yes; then
         esac
         ;;
 
-      cygwin* | mingw* | pw32* | cegcc*)
+      cygwin* | msys* | mingw* | pw32* | cegcc*)
         # _LT_TAGVAR(hardcode_libdir_flag_spec, $1) is actually meaningless,
         # as there is no search path for DLLs.
         _LT_TAGVAR(hardcode_libdir_flag_spec, $1)='-L$libdir'

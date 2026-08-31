@@ -23,6 +23,14 @@ along with GCC; see the file COPYING3.  If not see
 
 #define DWARF2_DEBUGGING_INFO 1
 
+#undef ASM_SPEC
+#define ASM_SPEC "%(asm_cpu_spec)"
+
+#if defined (TARGET_CYGWIN64)
+# undef MULTILIB_DEFAULTS
+# define MULTILIB_DEFAULTS { "mabi=lp64" }
+#endif
+
 #undef PREFERRED_DEBUGGING_TYPE
 #define PREFERRED_DEBUGGING_TYPE DWARF2_DEBUG
 
@@ -141,6 +149,8 @@ still needed for compilation.  */
   do									\
     {									\
       builtin_define ("__SEH__");					\
+      /* This selects 64-bit Windows declarations, not the LLP64 model.  */	\
+      builtin_define ("_WIN64");					\
       builtin_define_with_int_value ("_INTEGRAL_MAX_BITS",		\
 				TYPE_PRECISION (intmax_type_node));	\
       builtin_define ("__stdcall=__attribute__((__stdcall__))");	\

@@ -1272,7 +1272,7 @@ aarch64*-*-gnu*)
         tmake_file="${tmake_file} aarch64/t-aarch64"
         tm_defines="${tm_defines}  TARGET_DEFAULT_ASYNC_UNWIND_TABLES=1"
 	;;
-aarch64-*-cygwin*)
+aarch64-*-cygwin* | aarch64-*-msys*)
 	tm_file="${tm_file} aarch64/aarch64-abi-ms.h"
 	tm_file="${tm_file} aarch64/aarch64-coff.h"
 	tm_file="${tm_file} aarch64/cygming.h"
@@ -1281,6 +1281,11 @@ aarch64-*-cygwin*)
 	tm_file="${tm_file} i386/cygwin-stdint.h"
 	tm_file="${tm_file} mingw/winnt.h"
 	tm_file="${tm_file} mingw/winnt-dll.h"
+	case ${target} in
+	  *-msys*)
+	    tm_file="${tm_file} aarch64/msys.h"
+	    ;;
+	esac
 	xm_file=i386/xm-cygwin.h
 	tmake_file="${tmake_file} aarch64/t-aarch64"
 	tmake_file="${tmake_file} mingw/t-cygming t-slibgcc"
@@ -1292,14 +1297,14 @@ aarch64-*-cygwin*)
 	cxx_target_objs="${cxx_target_objs} winnt-cxx.o msformat-c.o"
 	d_target_objs="${d_target_objs} cygwin-d.o"
 	target_has_targetdm="yes"
-	aarch64_multilibs="llp64"
+	aarch64_multilibs="lp64"
 	if test x$enable_threads = xyes; then
 		thread_file='posix'
 	fi
 	default_use_cxa_atexit=yes
 	use_gcc_stdint=wrap
 	tm_defines="${tm_defines} TARGET_64BIT=1 TARGET_CYGWIN64=1 TARGET_64BIT_MS_ABI=1 TARGET_AARCH64_MS_ABI=1"
-	TM_MULTILIB_CONFIG="${TM_MULTILIB_CONFIG},llp64"
+	TM_MULTILIB_CONFIG="${TM_MULTILIB_CONFIG},lp64"
 	TM_MULTILIB_CONFIG=`echo $TM_MULTILIB_CONFIG | sed 's/^,//'`
 	;;
 aarch64-*-mingw*)
@@ -1318,7 +1323,7 @@ aarch64-*-mingw*)
 	c_target_objs="${c_target_objs} msformat-c.o"
 	cxx_target_objs="${cxx_target_objs} msformat-c.o"
 	tmake_file="${tmake_file} t-winnt mingw/t-cygming t-slibgcc"
-	aarch64_multilibs="llp64"
+	aarch64_multilibs="lp64"
 	case ${enable_threads} in
 	  "" | yes | win32)
 	    thread_file='win32'
@@ -1328,9 +1333,10 @@ aarch64-*-mingw*)
 	    ;;
 	esac
 	default_use_cxa_atexit=yes
+	native_system_header_dir=/mingw/include
 	user_headers_inc_next_post="${user_headers_inc_next_post} float.h"
 	tm_defines="${tm_defines} TARGET_AARCH64_MS_ABI=1"
-	TM_MULTILIB_CONFIG="${TM_MULTILIB_CONFIG},llp64"
+	TM_MULTILIB_CONFIG="${TM_MULTILIB_CONFIG},lp64"
 	TM_MULTILIB_CONFIG=`echo $TM_MULTILIB_CONFIG | sed 's/^,//'`
 	;;
 aarch64*-wrs-vxworks*)

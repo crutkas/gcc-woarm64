@@ -68,6 +68,8 @@ still needed for compilation.  */
 #define TARGET_ASM_UNWIND_EMIT_BEFORE_INSN  false
 #undef  TARGET_ASM_FUNCTION_END_PROLOGUE
 #define TARGET_ASM_FUNCTION_END_PROLOGUE  mingw_pe_seh_end_prologue
+#undef  TARGET_ASM_FUNCTION_BEGIN_EPILOGUE
+#define TARGET_ASM_FUNCTION_BEGIN_EPILOGUE mingw_pe_seh_begin_epilogue
 #undef  TARGET_ASM_EMIT_EXCEPT_PERSONALITY
 #define TARGET_ASM_EMIT_EXCEPT_PERSONALITY mingw_pe_seh_emit_except_personality
 #undef  TARGET_ASM_INIT_SECTIONS
@@ -75,17 +77,8 @@ still needed for compilation.  */
 #undef  SUBTARGET_ASM_UNWIND_INIT
 #define SUBTARGET_ASM_UNWIND_INIT  mingw_pe_seh_init
 
-/* According to Windows x64 software convention, the maximum stack allocatable
-   in the prologue is 4G - 8 bytes.  Furthermore, there is a limited set of
-   instructions allowed to adjust the stack pointer in the epilog, forcing the
-   use of frame pointer for frames larger than 2 GB.  This theorical limit
-   is reduced by 256, an over-estimated upper bound for the stack use by the
-   prologue.
-   We define only one threshold for both the prolog and the epilog.  When the
-   frame size is larger than this threshold, we allocate the area to save SSE
-   regs, then save them, and then allocate the remaining.  There is no SEH
-   unwind info for this later allocation.  */
-#define SEH_MAX_FRAME_SIZE ((2U << 30) - 256)
+/* ARM64's alloc_l encoding has a 24-bit field scaled by 16.  */
+#define SEH_MAX_FRAME_SIZE (1U << 28)
 
 #undef TARGET_PECOFF
 #define TARGET_PECOFF 1
@@ -244,6 +237,11 @@ still needed for compilation.  */
 #define SUBTARGET_OVERRIDE_OPTIONS			\
   do {							\
     flag_stack_check = STATIC_BUILTIN_STACK_CHECK;	\
+    if (TARGET_SEH)					\
+      {							\
+	flag_reorder_blocks_and_partition = 0;		\
+	flag_reorder_blocks = 1;				\
+      }							\
   } while (0)
 
 #undef ASM_DECLARE_FUNCTION_SIZE

@@ -112,7 +112,7 @@ function switch_flags (flags)
 	result = "0"
 	for (j = 0; j < n_langs; j++) {
 		regex = langs[j]
-		gsub ( "\\+", "\\+", regex )
+		gsub ( "\\+", "[+]", regex )
 		result = result test_flag(regex, flags, " | " macros[j])
 	}
 	result = result \

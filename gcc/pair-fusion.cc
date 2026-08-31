@@ -3122,6 +3122,9 @@ void pair_fusion::process_block (bb_info *bb)
       if (!rti || !INSN_P (rti))
 	continue;
 
+      if (!pair_mem_candidate_insn_p (rti))
+	continue;
+
       rtx pat = PATTERN (rti);
       bool load_p;
       if (reload_completed

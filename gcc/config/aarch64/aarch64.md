@@ -1083,7 +1083,7 @@
   {
     const char *ret = NULL;
     if (aarch64_return_address_signing_enabled ()
-	&& (TARGET_PAUTH))
+	&& aarch64_use_pauth_return_insn_p ())
       {
 	if (aarch64_ra_sign_key == AARCH64_KEY_B)
 	  ret = "retab";

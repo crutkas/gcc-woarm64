@@ -142,6 +142,12 @@ struct pair_fusion {
   // true iff INSN is a load pair.
   virtual bool pair_mem_insn_p (rtx_insn *insn, bool &load_p) = 0;
 
+  // Return true if INSN should be considered as one half of a new pair.
+  virtual bool pair_mem_candidate_insn_p (rtx_insn *)
+  {
+    return true;
+  }
+
   // Return true if we should track loads.
   virtual bool track_loads_p ()
   {

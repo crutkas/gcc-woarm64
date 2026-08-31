@@ -104,6 +104,11 @@
 /* Defined for convenience.  */
 #define POINTER_BYTES (POINTER_SIZE / BITS_PER_UNIT)
 
+/* Not on SEH unless explicitly set.  */
+#ifndef TARGET_SEH
+#define TARGET_SEH 0
+#endif
+
 /* Maximum bytes set for an inline memset expansion.  With -Os use 3 STP
    and 1 MOVI/DUP (same size as a call).  */
 #define MAX_SET_SIZE(speed) (speed ? 256 : 96)
@@ -5137,6 +5142,25 @@ static inline void
 aarch64_add_sp (rtx temp1, rtx temp2, poly_int64 delta,
 		aarch64_isa_mode force_isa_mode, bool emit_move_imm)
 {
+#if defined (TARGET_AARCH64_MS_ABI)
+  HOST_WIDE_INT constant;
+  const HOST_WIDE_INT seh_max_imm = 4095 << 12;
+  if (TARGET_SEH && delta.is_constant (&constant)
+      && constant > seh_max_imm)
+    {
+      while (constant > seh_max_imm)
+	{
+	  aarch64_add_offset (Pmode, stack_pointer_rtx, stack_pointer_rtx,
+			      seh_max_imm, NULL_RTX, NULL_RTX,
+			      force_isa_mode, true, true);
+	  constant -= seh_max_imm;
+	}
+      aarch64_add_offset (Pmode, stack_pointer_rtx, stack_pointer_rtx,
+			  constant, temp1, temp2, force_isa_mode, true,
+			  emit_move_imm);
+      return;
+    }
+#endif
   aarch64_add_offset (Pmode, stack_pointer_rtx, stack_pointer_rtx, delta,
 		      temp1, temp2, force_isa_mode, true, emit_move_imm);
 }
@@ -5150,6 +5174,25 @@ aarch64_sub_sp (rtx temp1, rtx temp2, poly_int64 delta,
 		aarch64_isa_mode force_isa_mode,
 		bool frame_related_p, bool emit_move_imm = true)
 {
+#if defined (TARGET_AARCH64_MS_ABI)
+  HOST_WIDE_INT constant;
+  const HOST_WIDE_INT seh_max_imm = 4095 << 12;
+  if (TARGET_SEH && frame_related_p && delta.is_constant (&constant)
+      && constant > seh_max_imm)
+    {
+      while (constant > seh_max_imm)
+	{
+	  aarch64_add_offset (Pmode, stack_pointer_rtx, stack_pointer_rtx,
+			      -seh_max_imm, NULL_RTX, NULL_RTX,
+			      force_isa_mode, true, true);
+	  constant -= seh_max_imm;
+	}
+      aarch64_add_offset (Pmode, stack_pointer_rtx, stack_pointer_rtx,
+			  -constant, temp1, temp2, force_isa_mode,
+			  frame_related_p, emit_move_imm);
+      return;
+    }
+#endif
   aarch64_add_offset (Pmode, stack_pointer_rtx, stack_pointer_rtx, -delta,
 		      temp1, temp2, force_isa_mode, frame_related_p,
 		      emit_move_imm);
@@ -8285,7 +8328,11 @@ aarch64_layout_frame (void)
     {
       frame.hard_fp_save_and_probe = push_regs[0];
       frame.wb_push_candidate1 = push_regs[0];
-      if (push_regs.size () > 1)
+      if (push_regs.size () > 1
+#if defined (TARGET_AARCH64_MS_ABI)
+	  && push_regs[1] == push_regs[0] + 1
+#endif
+	  )
 	frame.wb_push_candidate2 = push_regs[1];
     }
 
@@ -8677,6 +8724,16 @@ aarch64_return_address_signing_enabled (void)
 	      && known_ge (cfun->machine->frame.reg_offset[LR_REGNUM], 0)));
 }
 
+/* Return true if the current target can authenticate LR as part of the
+   return instruction.  Windows SEH needs a separate authentication
+   instruction so that it can be represented in the epilogue unwind code.  */
+
+bool
+aarch64_use_pauth_return_insn_p (void)
+{
+  return TARGET_PAUTH && !TARGET_SEH;
+}
+
 /* Only used by the arm backend.  */
 void aarch_bti_arch_check (void)
 {}
@@ -8884,6 +8941,9 @@ aarch64_save_callee_saves (poly_int64 bytes_below_sp,
 	  && reg == move_src
 	  && i + 1 < regs.size ()
 	  && (regno2 = regs[i + 1], !skip_save_p (regno2))
+#if defined (TARGET_AARCH64_MS_ABI)
+	  && regno2 == regno + 1
+#endif
 	  && known_eq (GET_MODE_SIZE (mode),
 		       frame.reg_offset[regno2] - frame.reg_offset[regno]))
 	{
@@ -8993,6 +9053,9 @@ aarch64_restore_callee_saves (poly_int64 bytes_below_sp,
       if (!aarch64_sve_mode_p (mode)
 	  && i + 1 < regs.size ()
 	  && (regno2 = regs[i + 1], !skip_restore_p (regno2))
+#if defined (TARGET_AARCH64_MS_ABI)
+	  && regno2 == regno + 1
+#endif
 	  && known_eq (GET_MODE_SIZE (mode),
 		       frame.reg_offset[regno2] - frame.reg_offset[regno]))
 	{
@@ -9098,6 +9161,9 @@ offset_12bit_unsigned_scaled_p (machine_mode mode, poly_int64 offset)
 static sbitmap
 aarch64_get_separate_components (void)
 {
+  if (TARGET_SEH)
+    return NULL;
+
   aarch64_frame &frame = cfun->machine->frame;
   sbitmap components = sbitmap_alloc (LAST_SAVED_REGNUM + 1);
   bitmap_clear (components);
@@ -9314,6 +9380,9 @@ aarch64_process_components (sbitmap components, bool prologue_p)
 	  || !satisfies_constraint_Ump (mem)
 	  || GP_REGNUM_P (regno) != GP_REGNUM_P (regno2)
 	  || (crtl->abi->id () == ARM_PCS_SIMD && FP_REGNUM_P (regno))
+#if defined (TARGET_AARCH64_MS_ABI)
+	  || (TARGET_SEH && regno2 != regno + 1)
+#endif
 	  || maybe_ne ((offset2 - frame.reg_offset[regno]),
 		       GET_MODE_SIZE (mode)))
 	{
@@ -9858,6 +9927,36 @@ aarch64_expand_prologue (void)
   if (aarch64_cfun_enables_pstate_sm ())
     force_isa_mode = AARCH64_ISA_MODE_SM_ON;
 
+#if defined (TARGET_AARCH64_MS_ABI)
+  if (TARGET_SEH)
+    {
+      HOST_WIDE_INT constant_frame_size;
+      bool scalable_frame = !frame_size.is_constant (&constant_frame_size);
+      for (unsigned int regno = V0_REGNUM;
+	   !scalable_frame && regno <= V31_REGNUM; ++regno)
+	if (known_ge (frame.reg_offset[regno], 0)
+	    && aarch64_sve_mode_p (aarch64_reg_save_mode (regno)))
+	  scalable_frame = true;
+
+      if (scalable_frame)
+	{
+	  sorry_at (DECL_SOURCE_LOCATION (cfun->decl),
+		    "Windows SEH does not support scalable AArch64 "
+		    "stack frames");
+	  return;
+	}
+
+      if (aarch64_return_address_signing_enabled ()
+	  && aarch64_ra_sign_key != AARCH64_KEY_B)
+	{
+	  sorry_at (DECL_SOURCE_LOCATION (cfun->decl),
+		    "Windows SEH does not support A-key return address "
+		    "signing");
+	  return;
+	}
+    }
+#endif
+
   if (flag_stack_clash_protection
       && known_eq (callee_adjust, 0)
       && known_lt (frame.reg_offset[VG_REGNUM], 0))
@@ -10289,9 +10388,12 @@ aarch64_expand_epilogue (rtx_call_insn *sibcall)
 	2) The RETAA instruction is not available without FEAT_PAuth, so if we
 	   are generating code for !TARGET_PAUTH we can't use it and must
 	   explicitly authenticate.
+
+	3) Windows SEH needs a separate authentication instruction so that the
+	   epilogue unwind code can describe it.
     */
   if (aarch64_return_address_signing_enabled ()
-      && (sibcall || !TARGET_PAUTH))
+      && (sibcall || !aarch64_use_pauth_return_insn_p ()))
     {
       switch (aarch64_ra_sign_key)
 	{
@@ -22757,6 +22859,10 @@ aarch64_madd_needs_nop (rtx_insn* insn)
 void
 aarch64_final_prescan_insn (rtx_insn *insn)
 {
+#if TARGET_AARCH64_MS_ABI
+  aarch64_pe_seh_end_epilogue (asm_out_file, insn);
+#endif
+
   if (aarch64_madd_needs_nop (insn))
     fprintf (asm_out_file, "\tnop // between mem op and mult-accumulate\n");
 }
@@ -28300,6 +28406,20 @@ aarch64_operands_ok_for_ldpstp (rtx *operands, bool load)
   /* Check if the registers are of same class.  */
   if (rclass_1 != rclass_2)
     return false;
+
+  /* A Windows unwind operation can only describe consecutive register
+     pairs.  Do not combine two frame-related saves or restores that the
+     prologue and epilogue expanders deliberately emitted separately.  */
+#if defined (TARGET_AARCH64_MS_ABI)
+  if (TARGET_SEH
+      && (RTX_FRAME_RELATED_P (peep2_next_insn (0))
+	  || RTX_FRAME_RELATED_P (peep2_next_insn (1)))
+      && HARD_REGISTER_NUM_P (REGNO (reg_1))
+      && HARD_REGISTER_NUM_P (REGNO (reg_2))
+      && REGNO (reg_1) + 1 != REGNO (reg_2)
+      && REGNO (reg_2) + 1 != REGNO (reg_1))
+    return false;
+#endif
 
   return true;
 }

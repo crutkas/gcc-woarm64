@@ -40,6 +40,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "output.h"
 #include "varasm.h"
 #include "lto-section-names.h"
+#if defined (TARGET_AARCH64_MS_ABI)
+#include "insn-codes.h"
+#include "rtl-iter.h"
+#endif
 
 /* i386/PE specific attribute support.
 
@@ -874,6 +878,17 @@ struct seh_frame_state
   /* True if we are past the end of the epilogue.  */
   bool after_prologue;
 
+  /* True while outputting an AArch64 epilogue.  */
+  bool in_epilogue;
+
+  /* A constant recently materialized for an AArch64 SP adjustment.  */
+  HOST_WIDE_INT aarch64_temp_value;
+  unsigned int aarch64_temp_regno;
+  bool aarch64_temp_valid;
+
+  /* True after diagnosing an unsupported AArch64 scalable frame.  */
+  bool aarch64_unsupported_reported;
+
   /* True if we are in the cold section.  */
   bool in_cold_section;
 };
@@ -917,6 +932,22 @@ mingw_pe_seh_end_prologue (FILE *f)
     return;
   cfun->machine->seh->after_prologue = true;
   fputs ("\t.seh_endprologue\n", f);
+}
+
+/* Emit an assembler directive for the start of an AArch64 epilogue.  */
+
+void
+mingw_pe_seh_begin_epilogue (FILE *f)
+{
+#if defined (TARGET_AARCH64_MS_ABI)
+  if (!TARGET_SEH || cfun->is_thunk || !cfun->machine->seh)
+    return;
+
+  cfun->machine->seh->in_epilogue = true;
+  fputs ("\t.seh_startepilogue\n", f);
+#else
+  (void) f;
+#endif
 }
 
 /* Emit assembler directives to reconstruct the SEH state.  */
@@ -1347,270 +1378,447 @@ i386_pe_seh_unwind_emit (FILE *out_file, rtx_insn *insn)
 }
 
 #if defined (TARGET_AARCH64_MS_ABI)
-#define CALLEE_SAVED_REG_NUMBER(r)		\
-  (((r) >= R19_REGNUM && (r) <= R30_REGNUM)	\
-   || ((r) >= V8_REGNUM && (r) <= V15_REGNUM))
-#else
-#define CALLEE_SAVED_REG_NUMBER(r) 0
-#endif
 
-static HOST_WIDE_INT
-seh_parallel_offset (rtx pat, HOST_WIDE_INT wanted_regnum)
+#define CALLEE_SAVED_REG_NUMBER(R)		\
+  (((R) >= R19_REGNUM && (R) <= R30_REGNUM)	\
+   || ((R) >= V8_REGNUM && (R) <= V15_REGNUM))
+
+/* Return true if ADDR is SP plus a constant, storing that constant in
+   OFFSET.  */
+
+static bool
+aarch64_seh_sp_offset (rtx addr, HOST_WIDE_INT *offset)
 {
-  rtx dest, src;
-  HOST_WIDE_INT result = 0;
-
-  if (GET_CODE (pat) == PARALLEL)
+  if (GET_CODE (addr) == PRE_MODIFY || GET_CODE (addr) == POST_MODIFY)
     {
-      int i, n = XVECLEN (pat, 0);
-
-      for (i = 0; i < n; ++i)
+      rtx update = XEXP (addr, 1);
+      if (GET_CODE (update) == PLUS
+	  && XEXP (update, 0) == stack_pointer_rtx
+	  && CONST_INT_P (XEXP (update, 1)))
 	{
-	  rtx ele = XVECEXP (pat, 0, i);
-
-	  if (GET_CODE (ele) != SET)
-	    continue;
-
-	  dest = SET_DEST (ele);
-	  src = SET_SRC (ele);
-
-	  if (GET_CODE (dest) == REG
-	      && REGNO (dest) == wanted_regnum
-	      && GET_CODE (src) == MEM
-	      && GET_CODE (XEXP (src, 0)) == PLUS
-	      && XEXP (XEXP (src, 0), 0) == stack_pointer_rtx)
-	  {
-	    result = INTVAL (XEXP (XEXP (src, 0), 1));
-	  }
-
-	  if (GET_CODE (src) == REG
-	      && REGNO (src) == wanted_regnum
-	      && GET_CODE (dest) == MEM
-	      && GET_CODE (XEXP (dest, 0)) == PLUS
-	      && XEXP (XEXP (dest, 0), 0) == stack_pointer_rtx)
-	  {
-	    result = INTVAL (XEXP (XEXP (dest, 0), 1));
-	  }
+	  *offset = -abs (INTVAL (XEXP (update, 1)));
+	  return true;
 	}
     }
-
-  return result;
+  if (addr == stack_pointer_rtx)
+    {
+      *offset = 0;
+      return true;
+    }
+  if (GET_CODE (addr) == PLUS
+      && XEXP (addr, 0) == stack_pointer_rtx
+      && CONST_INT_P (XEXP (addr, 1)))
+    {
+      *offset = INTVAL (XEXP (addr, 1));
+      return true;
+    }
+  return false;
 }
 
-static void
-seh_pattern_emit (FILE *f, struct seh_frame_state *seh, rtx pat)
+/* Emit a save directive for REG at OFFSET from SP.  */
+
+static bool
+aarch64_seh_emit_save (FILE *f, rtx reg, HOST_WIDE_INT offset)
 {
-#if defined (TARGET_AARCH64_MS_ABI)
+  unsigned int regno = REGNO (reg);
+  bool writeback = offset < 0;
 
-   rtx dest, src;
+  if (FP_REGNUM_P (regno))
+    fprintf (f, "\t.seh_save_freg%s\td%u, " HOST_WIDE_INT_PRINT_DEC "\n",
+	     writeback ? "_x" : "", regno - V0_REGNUM, abs (offset));
+  else if (GP_REGNUM_P (regno))
+    fprintf (f, "\t.seh_save_reg%s\tx%u, " HOST_WIDE_INT_PRINT_DEC "\n",
+	     writeback ? "_x" : "", regno, abs (offset));
+  else
+    gcc_unreachable ();
+  return true;
+}
 
-   if (GET_CODE (pat) == PARALLEL)
+/* Emit a save directive for the two registers in REGNO.  OFFSET is the
+   address of the first register, or a negative writeback amount.  */
+
+static bool
+aarch64_seh_emit_save_pair (FILE *f, unsigned int regno[2],
+			    HOST_WIDE_INT offset)
+{
+  bool writeback = offset < 0;
+  const char *suffix = writeback ? "_x" : "";
+  HOST_WIDE_INT abs_offset = abs (offset);
+
+  if (regno[0] == FP_REGNUM && regno[1] == LR_REGNUM)
     {
-      int i, n = XVECLEN (pat, 0);
-      HOST_WIDE_INT regno, min_regno = V15_REGNUM;
-      int reg_count = 0;
-      HOST_WIDE_INT increment = 0;
+      fprintf (f, "\t.seh_save_fplr%s\t" HOST_WIDE_INT_PRINT_DEC "\n",
+	       suffix, abs_offset);
+      return true;
+    }
 
-      for (i = 0; i < n; ++i)
+  if (regno[0] == R19_REGNUM && regno[1] == R20_REGNUM
+      && writeback && abs_offset <= 248)
+    {
+      fprintf (f, "\t.seh_save_r19r20_x\t"
+	       HOST_WIDE_INT_PRINT_DEC "\n", abs_offset);
+      return true;
+    }
+
+  bool save0 = CALLEE_SAVED_REG_NUMBER (regno[0]);
+  bool save1 = CALLEE_SAVED_REG_NUMBER (regno[1]);
+  if (!save0 && !save1)
+    return false;
+
+  if (save0 && save1 && regno[1] == regno[0] + 1)
+    {
+      if (FP_REGNUM_P (regno[0]))
+	fprintf (f, "\t.seh_save_fregp%s\td%u, "
+		 HOST_WIDE_INT_PRINT_DEC "\n", suffix,
+		 regno[0] - V0_REGNUM, abs_offset);
+      else
+	fprintf (f, "\t.seh_save_regp%s\tx%u, "
+		 HOST_WIDE_INT_PRINT_DEC "\n", suffix, regno[0], abs_offset);
+      return true;
+    }
+
+  /* One physical STP/LDP cannot be described by two unwind operations.  */
+  gcc_assert (!save0 || !save1);
+  if (save0)
+    return aarch64_seh_emit_save (f, gen_rtx_REG (DImode, regno[0]), offset);
+  return aarch64_seh_emit_save (f, gen_rtx_REG (DImode, regno[1]),
+				writeback ? offset
+				: offset + UNITS_PER_WORD);
+}
+
+/* Emit the unwind operation represented by a PARALLEL save or restore.  */
+
+static bool
+aarch64_seh_emit_parallel (FILE *f, rtx pat)
+{
+  unsigned int regno[2];
+  HOST_WIDE_INT offsets[2];
+  HOST_WIDE_INT sp_adjust = 0;
+  unsigned int reg_count = 0;
+
+  for (int i = 0, n = XVECLEN (pat, 0); i < n; ++i)
+    {
+      rtx ele = XVECEXP (pat, 0, i);
+      if (GET_CODE (ele) != SET)
+	continue;
+
+      rtx dest = SET_DEST (ele);
+      rtx src = SET_SRC (ele);
+      if (dest == stack_pointer_rtx
+	  && GET_CODE (src) == PLUS
+	  && XEXP (src, 0) == stack_pointer_rtx
+	  && CONST_INT_P (XEXP (src, 1)))
 	{
-	  rtx ele = XVECEXP (pat, 0, i);
-
-	  if (GET_CODE (ele) != SET)
-	    continue;
-
-	  dest = SET_DEST (ele);
-	  src = SET_SRC (ele);
-
-	  if (GET_CODE (dest) == REG
-	      && GET_CODE (src) == PLUS
-	      && XEXP (src, 0) == stack_pointer_rtx)
-	  {
-	    increment = INTVAL (XEXP (src, 1));
-	  }
-
-	  if (!seh->after_prologue && GET_CODE (src) == REG)
-	  {
-	    regno = REGNO (src);
-
-	    if (CALLEE_SAVED_REG_NUMBER (regno))
-	      {
-		reg_count += 1;
-		min_regno = MIN (regno, min_regno);
-	      }
-	  }
-
-	  if (seh->after_prologue && GET_CODE (dest) == REG)
-	    {
-	      regno = REGNO (dest);
-
-	      if (CALLEE_SAVED_REG_NUMBER (regno))
-	      {
-		reg_count += 1;
-		min_regno = MIN (regno, min_regno);
-	      }
-	    }
+	  sp_adjust = INTVAL (XEXP (src, 1));
+	  continue;
 	}
+
+      rtx reg;
+      rtx mem;
+      HOST_WIDE_INT extra_offset = 0;
+      if (REG_P (src) && MEM_P (dest))
+	{
+	  reg = src;
+	  mem = dest;
+	}
+      else if (REG_P (dest) && MEM_P (src))
+	{
+	  reg = dest;
+	  mem = src;
+	}
+      else if (REG_P (dest) && GET_CODE (src) == UNSPEC
+	       && (XINT (src, 1) == UNSPEC_LDP_FST
+		   || XINT (src, 1) == UNSPEC_LDP_SND))
+	{
+	  reg = dest;
+	  mem = XVECEXP (src, 0, 0);
+	  if (XINT (src, 1) == UNSPEC_LDP_SND)
+	    extra_offset = UNITS_PER_WORD;
+	}
+      else
+	continue;
+
+      HOST_WIDE_INT offset;
+      if (!aarch64_seh_sp_offset (XEXP (mem, 0), &offset)
+	  || !CALLEE_SAVED_REG_NUMBER (REGNO (reg)))
+	continue;
+      offset += extra_offset;
 
       if (reg_count == 2)
-      {
-	HOST_WIDE_INT offset = increment != 0 ? abs (increment) :
-		       seh_parallel_offset (pat, min_regno);
-
-	if (FP_REGNUM_P(regno))
-	  fprintf (f, "\t.seh_save_%s	d%ld, %ld\n",
-	    increment != 0 ? "fregp_x" : "fregp",
-	    min_regno - V0_REGNUM,
-	    offset);
-	else
-	  fprintf (f, "\t.seh_save_%s	x%ld, %ld\n",
-	    increment != 0 ? "regp_x" : "regp",
-	    min_regno,
-	    offset);
-      }
+	gcc_unreachable ();
+      regno[reg_count] = REGNO (reg);
+      offsets[reg_count++] = offset;
     }
-  else
+
+  if (reg_count == 0)
+    return false;
+  if (reg_count == 1)
     {
-      src = SET_SRC (pat);
-
-      if (GET_CODE (pat) == SET)
-      {
-	HOST_WIDE_INT increment = 0;
-	dest = SET_DEST (pat);
-	static HOST_WIDE_INT stack_alloc = 0;
-
-	switch (GET_CODE (dest))
-	  {
-	  case REG:
-	    switch (GET_CODE (src))
-	      {
-	      case REG:
-		if (dest == hard_frame_pointer_rtx
-		    && src == stack_pointer_rtx)
-		  fputs ("\t.seh_set_fp\n", f);
-		else if (CALLEE_SAVED_REG_NUMBER (REGNO (dest))
-			 && src == stack_pointer_rtx)
-		  seh_emit_save (f, seh, dest, INTVAL (XEXP (src, 1)));
-		break;
-
-	      case PLUS:
-		increment = INTVAL (XEXP (src, 1));
-		src = XEXP (src, 0);
-		if (dest == stack_pointer_rtx)
-		  seh_emit_stackalloc (f, seh, increment);
-		break;
-
-	      case MINUS:
-		src = XEXP (src, 0);
-		rtx extend;
-		extend = SET_SRC (pat);
-		extend = XEXP (extend, 1);
-		if (dest == stack_pointer_rtx && src == stack_pointer_rtx
-		    && REGNO(extend) == R12_REGNUM) 
-		  seh_emit_stackalloc (f, seh, stack_alloc);
-   	      break;
-
-	      case CONST_INT:
-		increment = INTVAL (src);
-		if (REGNO(dest) == R12_REGNUM)
-		  stack_alloc = increment;
-		break;
-
-	      case MEM:
-		src = XEXP (src, 0);
-		if (GET_CODE (src) == PLUS
-		    && GET_CODE (XEXP (src, 0)) == REG
-		    && CALLEE_SAVED_REG_NUMBER (REGNO (dest))
-		    && XEXP (src, 0) == stack_pointer_rtx)
-		  seh_emit_save (f, seh, dest, INTVAL (XEXP (src, 1)));
-		break;
-
-	      default:
-		break;
-	      }
-	    break;
-
-	  case MEM: // Save
-	    dest = XEXP (dest, 0);
-	    if (GET_CODE (dest) == PRE_DEC
-		&& CALLEE_SAVED_REG_NUMBER (REGNO (src))
-		&& XEXP (dest, 0) == stack_pointer_rtx)
-	      seh_emit_save (f, seh, src, INTVAL (XEXP (dest, 1)));
-	    else if (GET_CODE (dest) == PLUS
-		     && CALLEE_SAVED_REG_NUMBER (REGNO (src))
-		     && XEXP (dest, 0) == stack_pointer_rtx)
-	      seh_emit_save (f, seh, src, INTVAL (XEXP (dest, 1)));
-	    break;
-
-	  default:
-	    break;
-	  }
-      }
-      else if (seh->after_prologue
-	       && (GET_CODE (pat) == RETURN || GET_CODE (pat) == JUMP_INSN))
-	fputs ("\t.seh_endepilogue\n", f);
+      HOST_WIDE_INT offset = sp_adjust ? -abs (sp_adjust) : offsets[0];
+      return aarch64_seh_emit_save (f, gen_rtx_REG (DImode, regno[0]),
+				    offset);
     }
 
-#endif
+  if (offsets[0] > offsets[1])
+    {
+      std::swap (offsets[0], offsets[1]);
+      std::swap (regno[0], regno[1]);
+    }
+  gcc_assert (offsets[1] - offsets[0] == UNITS_PER_WORD);
+
+  HOST_WIDE_INT offset = sp_adjust ? -abs (sp_adjust) : offsets[0];
+  return aarch64_seh_emit_save_pair (f, regno, offset);
 }
 
-/* This function looks at a single insn and emits any SEH directives
-   required for unwind of this insn.  */
+/* Emit the AArch64 unwind operation represented by PAT.  */
 
-void
-aarch64_pe_seh_unwind_emit (FILE *out_file, rtx_insn *insn)
+static bool
+aarch64_seh_pattern_emit (FILE *f, struct seh_frame_state *seh, rtx pat,
+			  bool frame_related_p)
 {
-  rtx note, pat;
-  struct seh_frame_state *seh;
-
-  if (!TARGET_SEH)
-    return;
-
-  if (NOTE_P (insn))
-    return;
-
-  seh = cfun->machine->seh;
-
-  if (!seh || seh->after_prologue)
-    return;
-
-  pat = PATTERN (insn);
-
-  if (GET_CODE (pat) == SET)
+  if (GET_CODE (pat) == PARALLEL)
     {
-       rtx dest = SET_DEST (pat);
-       if (GET_CODE (dest) == MEM && GET_CODE (XEXP (dest, 0)) == SCRATCH)
-	 return;
+      if (!seh->in_epilogue && !frame_related_p)
+	return false;
+      return aarch64_seh_emit_parallel (f, pat);
     }
+  if (GET_CODE (pat) != SET)
+    return false;
 
-  bool related_exp_needed = true;
+  rtx dest = SET_DEST (pat);
+  rtx src = SET_SRC (pat);
 
-  for (note = REG_NOTES (insn); note ; note = XEXP (note, 1))
+  if (REG_P (dest) && REGNO (dest) == R30_REGNUM
+      && GET_CODE (src) == UNSPEC)
     {
-      switch (REG_NOTE_KIND (note))
+      switch (XINT (src, 1))
 	{
-	case REG_FRAME_RELATED_EXPR:
-	  pat = XEXP (note, 0);
-	  seh_pattern_emit (out_file, seh, pat);
-	  related_exp_needed = false;
-	  break;
-
-	case REG_CFA_EXPRESSION:
-	case REG_CFA_REGISTER:
-	case REG_CFA_OFFSET:
-	  related_exp_needed = false;
-	  break;
+	case UNSPEC_PACIBSP:
+	case UNSPEC_AUTIBSP:
+	  fputs ("\t.seh_pac_sign_lr\n", f);
+	  return true;
 
 	default:
 	  break;
 	}
     }
 
-  if (related_exp_needed)
+  if (REG_P (dest) && CONST_INT_P (src))
     {
-      pat = PATTERN (insn);
-      seh_pattern_emit (out_file, seh, pat);
+      seh->aarch64_temp_value = INTVAL (src);
+      seh->aarch64_temp_regno = REGNO (dest);
+      seh->aarch64_temp_valid = true;
+      return false;
+    }
+
+  if (dest == hard_frame_pointer_rtx && src == stack_pointer_rtx)
+    {
+      fputs ("\t.seh_set_fp\n", f);
+      return true;
+    }
+
+  if (seh->in_epilogue && dest == stack_pointer_rtx
+      && src == hard_frame_pointer_rtx)
+    {
+      fputs ("\t.seh_set_fp\n", f);
+      return true;
+    }
+
+  if (REG_P (dest) && GET_CODE (src) == PLUS
+      && XEXP (src, 0) == stack_pointer_rtx
+      && CONST_INT_P (XEXP (src, 1)))
+    {
+      HOST_WIDE_INT offset = INTVAL (XEXP (src, 1));
+      if (dest == stack_pointer_rtx)
+	{
+	  seh_emit_stackalloc (f, seh, offset);
+	  return abs (offset) < SEH_MAX_FRAME_SIZE;
+	}
+      else if (dest == hard_frame_pointer_rtx)
+	{
+	  fprintf (f, "\t.seh_add_fp\t" HOST_WIDE_INT_PRINT_DEC "\n",
+		   abs (offset));
+	  return true;
+	}
+      return false;
+    }
+
+  if (dest == stack_pointer_rtx
+      && (GET_CODE (src) == PLUS || GET_CODE (src) == MINUS)
+      && XEXP (src, 0) == stack_pointer_rtx
+      && REG_P (XEXP (src, 1))
+      && seh->aarch64_temp_valid
+      && REGNO (XEXP (src, 1)) == seh->aarch64_temp_regno)
+    {
+      HOST_WIDE_INT offset = seh->aarch64_temp_value;
+      seh_emit_stackalloc (f, seh, offset);
+      return abs (offset) < SEH_MAX_FRAME_SIZE;
+    }
+
+  if (REG_P (dest) && seh->aarch64_temp_valid
+      && REGNO (dest) == seh->aarch64_temp_regno)
+    seh->aarch64_temp_valid = false;
+
+  /* Ordinary argument loads and stores can be scheduled into the prologue
+     and use callee-saved registers.  They are not unwind operations.  */
+  if (!seh->in_epilogue && !frame_related_p)
+    return false;
+
+  rtx reg;
+  rtx mem;
+  if (REG_P (src) && MEM_P (dest))
+    {
+      reg = src;
+      mem = dest;
+    }
+  else if (REG_P (dest) && MEM_P (src))
+    {
+      reg = dest;
+      mem = src;
+    }
+  else
+    {
+      if (MEM_P (dest) && GET_CODE (src) == UNSPEC
+	  && XINT (src, 1) == UNSPEC_STP)
+	{
+	  rtx addr = XEXP (dest, 0);
+	  if (GET_CODE (addr) == PLUS
+	      && XEXP (addr, 0) == hard_frame_pointer_rtx
+	      && CONST_INT_P (XEXP (addr, 1)))
+	    {
+	      rtvec vec = XVEC (src, 0);
+	      unsigned int pair[2] = {
+		REGNO (RTVEC_ELT (vec, 0)), REGNO (RTVEC_ELT (vec, 1))
+	      };
+	      return aarch64_seh_emit_save_pair (f, pair,
+						 INTVAL (XEXP (addr, 1)));
+	    }
+	}
+      return false;
+    }
+
+  HOST_WIDE_INT offset;
+  if (CALLEE_SAVED_REG_NUMBER (REGNO (reg))
+      && aarch64_seh_sp_offset (XEXP (mem, 0), &offset))
+    return aarch64_seh_emit_save (f, reg, offset);
+  return false;
+}
+
+/* Return true if PAT contains an operation whose size depends on the SVE
+   vector length.  */
+
+static bool
+aarch64_seh_scalable_pattern_p (rtx pat)
+{
+  subrtx_var_iterator::array_type array;
+  FOR_EACH_SUBRTX_VAR (iter, array, pat, ALL)
+    {
+      rtx sub = *iter;
+      machine_mode mode = GET_MODE (sub);
+      if (mode != VOIDmode && aarch64_sve_mode_p (mode))
+	return true;
+
+      poly_int64 value;
+      if (poly_int_rtx_p (sub, &value) && !value.is_constant ())
+	return true;
+    }
+  return false;
+}
+
+/* Look at a single instruction and emit its AArch64 SEH operation.  */
+
+void
+aarch64_pe_seh_unwind_emit (FILE *out_file, rtx_insn *insn)
+{
+  if (!TARGET_SEH || NOTE_P (insn))
+    return;
+
+  struct seh_frame_state *seh = cfun->machine->seh;
+  if (!seh)
+    return;
+
+  if (seh->after_prologue && !seh->in_epilogue)
+    {
+      if (seh->aarch64_temp_valid
+	  && modified_in_p (gen_rtx_REG (DImode, seh->aarch64_temp_regno),
+			    insn))
+	seh->aarch64_temp_valid = false;
+      return;
+    }
+
+  rtx pat = PATTERN (insn);
+  bool frame_related_p = RTX_FRAME_RELATED_P (insn);
+  for (rtx note = REG_NOTES (insn); note; note = XEXP (note, 1))
+    {
+      if (REG_NOTE_KIND (note) == REG_FRAME_RELATED_EXPR)
+	{
+	  pat = XEXP (note, 0);
+	  frame_related_p = true;
+	}
+      else if (REG_NOTE_KIND (note) == REG_CFA_ADJUST_CFA
+	       && XEXP (note, 0))
+	{
+	  pat = XEXP (note, 0);
+	  frame_related_p = true;
+	}
+    }
+
+  if (aarch64_seh_scalable_pattern_p (pat))
+    {
+      if (!seh->aarch64_unsupported_reported)
+	sorry_at (DECL_SOURCE_LOCATION (cfun->decl),
+		  "Windows SEH does not support scalable AArch64 stack frames");
+      seh->aarch64_unsupported_reported = true;
+      return;
+    }
+
+  unsigned int insn_count = get_attr_length (insn) / 4;
+  if (INSN_CODE (insn) == CODE_FOR_probe_stack_range)
+    insn_count = 4;
+  if (insn_count == 0)
+    return;
+
+  /* A multi-instruction frame pattern performs its semantic operation last;
+     cover preceding address or immediate materialization instructions.  */
+  for (unsigned int i = 1; i < insn_count; ++i)
+    fputs ("\t.seh_nop\n", out_file);
+
+  if (!aarch64_seh_pattern_emit (out_file, seh, pat, frame_related_p))
+    fputs ("\t.seh_nop\n", out_file);
+}
+
+/* Close an AArch64 epilogue immediately before its return or sibling call.  */
+
+void
+aarch64_pe_seh_end_epilogue (FILE *out_file, rtx_insn *insn)
+{
+  if (!TARGET_SEH || !cfun->machine->seh
+      || !cfun->machine->seh->in_epilogue)
+    return;
+
+  if (returnjump_p (insn)
+      || (CALL_P (insn) && SIBLING_CALL_P (insn)))
+    {
+      fputs ("\t.seh_endepilogue\n", out_file);
+      cfun->machine->seh->in_epilogue = false;
     }
 }
+
+#else
+
+void
+aarch64_pe_seh_unwind_emit (FILE *, rtx_insn *)
+{
+  gcc_unreachable ();
+}
+
+void
+aarch64_pe_seh_end_epilogue (FILE *, rtx_insn *)
+{
+  gcc_unreachable ();
+}
+
+#endif
 
 void
 mingw_pe_seh_emit_except_personality (rtx personality)

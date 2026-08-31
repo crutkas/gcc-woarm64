@@ -1041,6 +1041,7 @@ void aarch64_register_pragmas (void);
 void aarch64_relayout_simd_types (void);
 void aarch64_reset_previous_fndecl (void);
 bool aarch64_return_address_signing_enabled (void);
+bool aarch64_use_pauth_return_insn_p (void);
 void aarch64_save_restore_target_globals (tree);
 void aarch64_addti_scratch_regs (rtx, rtx, rtx *,
 				 rtx *, rtx *,
@@ -1264,6 +1265,7 @@ extern unsigned aarch64_data_alignment (const_tree exp, unsigned align);
 extern unsigned aarch64_stack_alignment (const_tree exp, unsigned align);
 
 extern void aarch64_pe_seh_unwind_emit (FILE *, rtx_insn *);
+extern void aarch64_pe_seh_end_epilogue (FILE *, rtx_insn *);
 extern void aarch64_print_reg (rtx, int, FILE*);
 
 #endif /* GCC_AARCH64_PROTOS_H */
